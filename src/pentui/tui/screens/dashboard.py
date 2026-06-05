@@ -34,6 +34,7 @@ class DashboardScreen(Screen[None]):
 
     BINDINGS = [
         ("n", "new_scan", "New scan"),
+        ("w", "workflows", "Workflows"),
         ("r", "results", "Results"),
         ("escape", "app.pop_screen", "Engagements"),
         ("q", "quit", "Quit"),
@@ -96,6 +97,13 @@ class DashboardScreen(Screen[None]):
 
         self.app.push_screen(
             ToolConfigScreen(self.registry, self.engagement, self.config)
+        )
+
+    def action_workflows(self) -> None:
+        from pentui.tui.screens.workflow_launch import WorkflowLaunchScreen
+
+        self.app.push_screen(
+            WorkflowLaunchScreen(self.engagement, self.registry, self.config)
         )
 
     def action_results(self) -> None:

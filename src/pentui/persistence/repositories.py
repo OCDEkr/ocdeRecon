@@ -12,6 +12,7 @@ import sqlite3
 
 from pentui.core.models import (
     Finding,
+    GateState,
     Host,
     Port,
     Project,
@@ -21,8 +22,11 @@ from pentui.core.models import (
     ScopeRule,
     Service,
     Severity,
+    StepRun,
     Target,
     TargetSource,
+    WorkflowRun,
+    WorkflowStatus,
 )
 
 
@@ -197,6 +201,86 @@ class AuditLogRepository:
             (project_id,),
         ).fetchall()
         return [(r["ts"], r["action"], r["detail"]) for r in rows]
+
+
+class WorkflowRunRepository:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def create(self, run: WorkflowRun) -> WorkflowRun:
+        cur = self.conn.execute(
+            "INSERT INTO workflow_run (project_id, workflow_name, definition_json, "
+            "status, unattended) VALUES (?, ?, ?, ?, ?);",
+            (run.project_id, run.workflow_name, run.definition_json,
+             run.status.value, int(run.unattended)),
+        )
+        self.conn.commit()
+        assert cur.lastrowid is not None
+        run.id = cur.lastrowid
+        return run
+
+    def update(self, run: WorkflowRun) -> None:
+        self.conn.execute(
+            "UPDATE workflow_run SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;",
+            (run.status.value, _dt(run.started_at), _dt(run.finished_at), run.id),
+        )
+        self.conn.commit()
+
+    def list_recent(self, project_id: int, limit: int = 20) -> list[WorkflowRun]:
+        rows = self.conn.execute(
+            "SELECT * FROM workflow_run WHERE project_id = ? ORDER BY id DESC LIMIT ?;",
+            (project_id, limit),
+        ).fetchall()
+        return [
+            WorkflowRun(
+                id=r["id"], project_id=r["project_id"], workflow_name=r["workflow_name"],
+                definition_json=r["definition_json"], status=WorkflowStatus(r["status"]),
+                unattended=bool(r["unattended"]), started_at=r["started_at"],
+                finished_at=r["finished_at"],
+            )
+            for r in rows
+        ]
+
+
+class StepRunRepository:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def create(self, step: StepRun) -> StepRun:
+        cur = self.conn.execute(
+            "INSERT INTO step_run (workflow_run_id, step_id, tool, scan_id, status, "
+            "gate_state) VALUES (?, ?, ?, ?, ?, ?);",
+            (step.workflow_run_id, step.step_id, step.tool, step.scan_id,
+             step.status.value, step.gate_state.value),
+        )
+        self.conn.commit()
+        assert cur.lastrowid is not None
+        step.id = cur.lastrowid
+        return step
+
+    def update(self, step: StepRun) -> None:
+        self.conn.execute(
+            "UPDATE step_run SET scan_id = ?, status = ?, gate_state = ?, "
+            "started_at = ?, finished_at = ? WHERE id = ?;",
+            (step.scan_id, step.status.value, step.gate_state.value,
+             _dt(step.started_at), _dt(step.finished_at), step.id),
+        )
+        self.conn.commit()
+
+    def list_for_run(self, workflow_run_id: int) -> list[StepRun]:
+        rows = self.conn.execute(
+            "SELECT * FROM step_run WHERE workflow_run_id = ? ORDER BY id;",
+            (workflow_run_id,),
+        ).fetchall()
+        return [
+            StepRun(
+                id=r["id"], workflow_run_id=r["workflow_run_id"], step_id=r["step_id"],
+                tool=r["tool"], scan_id=r["scan_id"], status=ScanStatus(r["status"]),
+                gate_state=GateState(r["gate_state"]), started_at=r["started_at"],
+                finished_at=r["finished_at"],
+            )
+            for r in rows
+        ]
 
 
 class HostRepository:

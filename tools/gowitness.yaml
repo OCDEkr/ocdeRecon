@@ -1,0 +1,17 @@
+# gowitness tool manifest (PROJECT.md §7). Web screenshotter — the canonical
+# downstream of an nmap web-port discovery. Requires gowitness on PATH to run.
+name: gowitness
+binary: gowitness
+description: "Screenshot web services"
+target:
+  mode: append                     # URLs are appended (fed from a query as target_urls)
+
+output:
+  stream: stdout                   # gowitness writes screenshots to its own store
+
+options:
+  - {flag: "--screenshot-path", label: "Screenshot output dir", type: value}
+  - {flag: "--timeout", label: "Per-target timeout (s)", type: value}
+
+profiles:
+  - {name: "Single shots", description: "Screenshot the given URLs", args: ["scan", "single"]}

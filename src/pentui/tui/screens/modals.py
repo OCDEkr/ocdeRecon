@@ -53,3 +53,41 @@ class ScopeBlockModal(ModalScreen[bool]):
     @on(Button.Pressed, "#cancel")
     def action_cancel(self) -> None:
         self.dismiss(False)
+
+
+class GateApproveModal(ModalScreen[bool]):
+    """Workflow gate: approve a step before it runs, or skip it (and its branch)."""
+
+    DEFAULT_CSS = """
+    GateApproveModal { align: center middle; }
+    #dialog {
+        width: 70; height: auto; padding: 1 2;
+        border: thick $warning; background: $surface;
+    }
+    #title { text-style: bold; color: $warning; }
+    Horizontal { height: auto; align: center middle; }
+    Button { margin: 1 1 0 1; }
+    """
+
+    BINDINGS = [("escape", "skip", "Skip")]
+
+    def __init__(self, step_id: str, detail: str) -> None:
+        super().__init__()
+        self.step_id = step_id
+        self.detail = detail
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(f"⏸ Gate: step '{self.step_id}'", id="title")
+            yield Static(self.detail)
+            with Horizontal():
+                yield Button("Approve", variant="success", id="approve")
+                yield Button("Skip", variant="warning", id="skip")
+
+    @on(Button.Pressed, "#approve")
+    def _approve(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#skip")
+    def action_skip(self) -> None:
+        self.dismiss(False)

@@ -15,12 +15,13 @@ See [`PROJECT.md`](./PROJECT.md) for the full specification and architecture.
 
 ## Status
 
-Phase 3 — engagements (one SQLite file each) hold scope rules and targets; a tool
-can be configured from a YAML manifest and run with live output (sudo handled for
-root-only options); **out-of-scope targets are blocked with a logged override**;
-results are parsed into the unified Host→Port→Service model, persisted, and
-browsed. Workflow orchestration (Phase 4) is not built yet. See `PROJECT.md` §16
-for the roadmap.
+Phase 4 — the orchestration milestone. Engagements hold scope rules and targets;
+tools run from YAML manifests with live output and the scope guardrail; results
+are parsed into the unified Host→Port→Service model, persisted, and browsed; and
+a **workflow engine** chains tools as a branching DAG — one tool's results feed
+the next through the data-handoff query layer (e.g. *hosts with open 80/443 →
+gowitness URLs*), with approval gates and an unattended mode. Reporting (Phase 5)
+is not built yet. See `PROJECT.md` §16 for the roadmap.
 
 ## Quick start (development)
 

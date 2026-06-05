@@ -13,10 +13,12 @@ async def start_engagement(
     includes: str = "",
     excludes: str = "",
     targets: str = "",
+    open_scan: bool = True,
 ) -> None:
-    """From the project-select screen, create an engagement and open the tool config.
+    """From the project-select screen, create an engagement.
 
-    Leaves the app on the ToolConfigScreen (engagement → dashboard → new scan).
+    With ``open_scan`` (default) it presses 'n' to leave the app on the
+    ToolConfigScreen; otherwise it stops on the DashboardScreen.
     """
     app = pilot.app
     app.screen.query_one("#name", Input).value = name
@@ -27,6 +29,6 @@ async def start_engagement(
     await pilot.pause()
     await pilot.click("#create")
     await pilot.pause()
-    # On the dashboard now; open a new scan.
-    await pilot.press("n")
-    await pilot.pause()
+    if open_scan:
+        await pilot.press("n")
+        await pilot.pause()
