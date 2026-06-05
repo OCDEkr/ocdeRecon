@@ -1,16 +1,18 @@
 """The Textual application shell.
 
-Phase 0 placeholder: a single screen confirming the app launches. Screens for
-project selection, tool config, the workflow builder/monitor, results, and
-reporting arrive in later phases (see PROJECT.md §11, §16).
+Phase 1: loads the tool registry and opens the tool-config screen so an operator
+can build and run a single command, watching output live. Project selection,
+the workflow builder/monitor, results, and reporting arrive in later phases
+(see PROJECT.md §11, §16).
 """
 
 from __future__ import annotations
 
-from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header, Static
+from textual.app import App
 
-from pentui import __version__
+from pentui.config import AppConfig
+from pentui.core.registry import build_registry
+from pentui.tui.screens.tool_config import ToolConfigScreen
 
 
 class PentuiApp(App[None]):
@@ -19,16 +21,15 @@ class PentuiApp(App[None]):
     TITLE = "pentui"
     SUB_TITLE = "offensive-security automation TUI"
 
-    BINDINGS = [("q", "quit", "Quit")]
+    def __init__(self, config: AppConfig | None = None) -> None:
+        super().__init__()
+        self.config = config or AppConfig()
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Static(
-            f"pentui {__version__} — Phase 0 skeleton.\n"
-            "Engine, workflows, and screens land in later phases (see PROJECT.md).",
-            id="placeholder",
-        )
-        yield Footer()
+    def on_mount(self) -> None:
+        registry = build_registry(self.config.user_tools_dir)
+        for error in registry.errors:
+            self.notify(error, severity="error", title="Manifest error", timeout=10)
+        self.push_screen(ToolConfigScreen(registry, self.config))
 
 
 def run() -> None:

@@ -15,8 +15,10 @@ See [`PROJECT.md`](./PROJECT.md) for the full specification and architecture.
 
 ## Status
 
-Phase 0 — project skeleton, data models, SQLite schema. Not yet runnable as a
-real tool. See `PROJECT.md` §16 for the build roadmap.
+Phase 1 — a tool can be configured from a YAML manifest and run from the TUI with
+live output streaming (sudo handled for root-only options). Result normalization
+(Phase 2) and workflow orchestration (Phase 4) are not built yet. See
+`PROJECT.md` §16 for the roadmap.
 
 ## Quick start (development)
 

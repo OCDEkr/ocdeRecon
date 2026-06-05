@@ -1,12 +1,115 @@
 """Tool manifest schema + loader (PROJECT.md §5).
 
-Phase 1. Manifests are declarative YAML describing how to build a tool's command,
-which options need root, the offered profiles, and which parser handles output.
-They are validated with Pydantic on load; invalid manifests are skipped with a
-clear error rather than crashing the app.
+Manifests are declarative YAML describing how to build a tool's command, which
+options need root, the offered profiles, and which parser handles output. They
+are validated with Pydantic on load; an invalid manifest raises
+``ManifestError`` so the registry can skip it with a clear message rather than
+crashing the app.
 """
 
 from __future__ import annotations
 
-# TODO(phase-1): define ToolManifest, ToolOption, ToolProfile, OutputSpec, TargetSpec
-# and a load_manifest(path) / load_manifests(dirs) loader.
+from enum import StrEnum
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, Field, ValidationError, model_validator
+
+
+class ManifestError(Exception):
+    """Raised when a manifest file is malformed or fails validation."""
+
+
+class OptionType(StrEnum):
+    BOOL = "bool"      # flag present/absent
+    VALUE = "value"    # flag + free-text value
+    CHOICE = "choice"  # flag + one of `choices`
+
+
+class TargetMode(StrEnum):
+    APPEND = "append"  # targets appended as trailing argv tokens
+    FLAG = "flag"      # targets written to a file passed via `flag`
+
+
+class ToolOption(BaseModel):
+    flag: str
+    label: str
+    type: OptionType = OptionType.BOOL
+    group: str | None = None
+    requires_root: bool = False
+    # value / choice
+    placeholder: str | None = None
+    validate_with: str | None = Field(default=None, alias="validate")
+    choices: list[str] = Field(default_factory=list)
+    default: str | None = None
+    #: Join flag and value into a single token (e.g. "-T4" instead of "-T", "4").
+    attached: bool = False
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def _check_choice(self) -> ToolOption:
+        if self.type is OptionType.CHOICE and not self.choices:
+            raise ValueError(f"option {self.flag!r} is type 'choice' but has no choices")
+        if self.default is not None and self.choices and self.default not in self.choices:
+            raise ValueError(f"option {self.flag!r} default {self.default!r} not in choices")
+        return self
+
+
+class ToolProfile(BaseModel):
+    name: str
+    description: str | None = None
+    args: list[str] = Field(default_factory=list)
+    requires_root: bool = False
+
+
+class ArtifactSpec(BaseModel):
+    flag: str
+    #: Output path template; ``{scan_dir}`` is substituted per-scan.
+    path: str
+
+
+class OutputSpec(BaseModel):
+    stream: str = "stdout"
+    artifact: ArtifactSpec | None = None
+    parser: str | None = None
+
+
+class TargetSpec(BaseModel):
+    mode: TargetMode = TargetMode.APPEND
+    flag: str | None = None
+
+    @model_validator(mode="after")
+    def _check_flag(self) -> TargetSpec:
+        if self.mode is TargetMode.FLAG and not self.flag:
+            raise ValueError("target.mode 'flag' requires a 'flag'")
+        return self
+
+
+class ToolManifest(BaseModel):
+    name: str
+    binary: str
+    description: str | None = None
+    version_check: list[str] = Field(default_factory=list)
+    target: TargetSpec = Field(default_factory=TargetSpec)
+    output: OutputSpec = Field(default_factory=OutputSpec)
+    options: list[ToolOption] = Field(default_factory=list)
+    profiles: list[ToolProfile] = Field(default_factory=list)
+
+    def profile(self, name: str) -> ToolProfile | None:
+        return next((p for p in self.profiles if p.name == name), None)
+
+
+def load_manifest(path: str | Path) -> ToolManifest:
+    """Load and validate a single manifest YAML file."""
+    path = Path(path)
+    try:
+        raw = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as exc:
+        raise ManifestError(f"{path}: could not read/parse YAML: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{path}: top level must be a mapping")
+    try:
+        return ToolManifest.model_validate(raw)
+    except ValidationError as exc:
+        raise ManifestError(f"{path}: invalid manifest:\n{exc}") from exc

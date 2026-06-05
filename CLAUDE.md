@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `pentui` — a Textual-based TUI that wraps and **automates** command-line
 offensive-security tools for authorized penetration testing. Its purpose is to
 **chain tools into workflows** so one tool's output feeds the next without manual
-intervention. **Nmap is the proof of concept.** Currently at **Phase 0**
-(skeleton, data models, SQLite schema); it is not yet a functional tool.
+intervention. **Nmap is the proof of concept.** Currently at **Phase 1**: a tool
+can be configured from a manifest and run with live output streaming. Result
+normalization/persistence (Phase 2) and orchestration (Phase 4) are not built yet.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.
@@ -20,7 +21,7 @@ Read it before non-trivial work. Section references below (§) point into it.
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# run the TUI (Phase 0 = placeholder screen)
+# run the TUI (configure a tool + run with live output)
 pentui                                  # or: python -m pentui.cli
 textual run --dev src/pentui/app.py     # dev mode with inspector
 textual console                         # live log/event console (separate terminal)

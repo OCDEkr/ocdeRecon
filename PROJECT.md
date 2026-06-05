@@ -187,16 +187,19 @@ options:
   - {flag: "-sV", label: "Service/version detection", type: bool}
   - {flag: "-O",  label: "OS detection", type: bool, requires_root: true}
   - {flag: "-p",  label: "Ports", type: value, placeholder: "22,80,443 or 1-65535", validate: ports}
-  - {flag: "-T",  label: "Timing template", type: choice, choices: ["0","1","2","3","4","5"], default: "4"}
+  - {flag: "-T",  label: "Timing template", type: choice, choices: ["0","1","2","3","4","5"], default: "4", attached: true}
 
+# Profiles are additive arg sets on top of the option form. Timing is the -T
+# option (default "4"), so profiles omit it to avoid emitting -T twice.
 profiles:
-  - {name: "Quick",        description: "Fast scan of common ports", args: ["-T4", "-F"]}
-  - {name: "Service scan", description: "Versions + default scripts", args: ["-sV", "-sC", "-T4"]}
-  - {name: "Full TCP",     description: "All TCP ports, SYN scan", args: ["-sS", "-p-", "-T4"], requires_root: true}
+  - {name: "Quick",        description: "Fast scan of common ports", args: ["-F"]}
+  - {name: "Service scan", description: "Versions + default scripts", args: ["-sV", "-sC"]}
+  - {name: "Full TCP",     description: "All TCP ports, SYN scan", args: ["-sS", "-p-"], requires_root: true}
 ```
 
 **Option `type`s:** `bool`, `value` (flag + string), `choice` (flag + one of
-`choices`). `requires_root` on an option or profile is unioned into the final
+`choices`). `attached: true` joins flag+value into one token (e.g. `-T4` rather
+than `-T 4`). `requires_root` on an option or profile is unioned into the final
 command's elevation decision. The downstream side of automation also relies on
 `target.mode` — the workflow engine materializes selected results into targets
 using it (see §7).
