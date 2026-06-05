@@ -1,0 +1,37 @@
+# Example workflow definition (PROJECT.md §7). Consumed by the WorkflowEngine
+# (Phase 4). A branching DAG: nmap discovery fans out to web screenshots, SMB
+# enumeration, and a deeper service scan, each fed by querying upstream results.
+name: web-recon
+description: "Discover hosts, screenshot web services, enumerate SMB"
+defaults:
+  gates: true                      # honored unless the run is unattended
+
+steps:
+  - id: discover
+    tool: nmap
+    profile: "Quick"
+    targets: {from: project}       # use the engagement's target list
+
+  - id: web-shots
+    tool: gowitness                # (a future tool manifest)
+    after: [discover]
+    input:
+      from: hosts
+      where: {port_open_in: [80, 443, 8080, 8443]}
+      as: target_urls              # host+port -> http(s)://host:port
+    gate: false                    # runs automatically
+
+  - id: smb-enum
+    tool: smb-enum                 # (a future tool manifest)
+    after: [discover]
+    input:
+      from: hosts
+      where: {port_open_in: [445]}
+      as: targets
+    gate: true                     # pause for operator approval first
+
+  - id: service-scan
+    tool: nmap
+    profile: "Service scan"
+    after: [discover]
+    input: {from: hosts, where: {state: up}, as: targets}
