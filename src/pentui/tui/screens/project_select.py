@@ -44,7 +44,7 @@ class ProjectSelectScreen(Screen[None]):
     Label { padding: 1 0 0 0; }
     """
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [("q", "app.quit", "Quit")]
 
     def __init__(self, config: AppConfig, registry: ToolRegistry) -> None:
         super().__init__()

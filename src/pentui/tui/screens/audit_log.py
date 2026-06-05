@@ -23,7 +23,7 @@ class AuditLogScreen(Screen[None]):
     DataTable { height: 1fr; margin: 0 1; }
     """
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "quit", "Quit")]
+    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "app.quit", "Quit")]
 
     def __init__(self, engagement: Engagement) -> None:
         super().__init__()

@@ -29,7 +29,7 @@ class ReportExportScreen(Screen[None]):
     #controls { height: auto; padding: 0 1; }
     """
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "quit", "Quit")]
+    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "app.quit", "Quit")]
 
     def __init__(self, engagement: Engagement, config: AppConfig) -> None:
         super().__init__()

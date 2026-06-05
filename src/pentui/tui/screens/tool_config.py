@@ -57,7 +57,7 @@ class ToolConfigScreen(Screen[None]):
     Button { margin: 1 1 0 0; }
     """
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "quit", "Quit")]
+    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "app.quit", "Quit")]
 
     def __init__(
         self,

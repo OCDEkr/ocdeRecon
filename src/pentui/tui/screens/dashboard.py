@@ -1,7 +1,9 @@
 """Engagement dashboard (PROJECT.md §11).
 
-Overview of one engagement: client, scope, targets, and recent scans — plus the
-launch points for a new scan and the results browser.
+Overview of one engagement: client, scope, target/result counts, and recent
+scans — plus the launch points for a new scan, workflows, results, export, and
+the audit log. Refreshed whenever the screen is shown so it reflects scans run
+since it was opened.
 """
 
 from __future__ import annotations
@@ -16,11 +18,16 @@ from pentui.core.models import ScopeKind
 from pentui.core.registry import ToolRegistry
 from pentui.persistence.engagement import Engagement
 from pentui.persistence.repositories import (
+    FindingRepository,
+    HostRepository,
+    PortRepository,
     ProjectRepository,
     ScanRepository,
     ScopeRuleRepository,
     TargetRepository,
 )
+
+_SCAN_COLUMNS = ("Scan", "Tool", "Profile", "Status", "Exit", "Root")
 
 
 class DashboardScreen(Screen[None]):
@@ -39,7 +46,7 @@ class DashboardScreen(Screen[None]):
         ("e", "export", "Export"),
         ("a", "audit", "Audit log"),
         ("escape", "app.pop_screen", "Engagements"),
-        ("q", "quit", "Quit"),
+        ("q", "app.quit", "Quit"),
     ]
 
     def __init__(
@@ -57,9 +64,18 @@ class DashboardScreen(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self._refresh()
+
+    def on_screen_resume(self) -> None:
+        # Returning from a scan/workflow — reflect any new results.
+        self._refresh()
+
+    def _refresh(self) -> None:
         self.query_one("#summary", Static).update(self._summary_text())
         table = self.query_one("#scans", DataTable)
-        table.add_columns("Scan", "Tool", "Profile", "Status", "Exit", "Root")
+        if not table.columns:
+            table.add_columns(*_SCAN_COLUMNS)
+        table.clear()
         scans = ScanRepository(self.engagement.conn).list_recent(self.engagement.project_id)
         for scan in scans:
             table.add_row(
@@ -81,6 +97,17 @@ class DashboardScreen(Screen[None]):
         includes = [r.value for r in rules if r.kind is ScopeKind.INCLUDE]
         excludes = [r.value for r in rules if r.kind is ScopeKind.EXCLUDE]
         targets = [t.value for t in TargetRepository(conn).list_for_project(pid)]
+
+        hosts = HostRepository(conn).list_for_project(pid)
+        ports_repo = PortRepository(conn)
+        open_ports = sum(
+            1
+            for h in hosts
+            for p in ports_repo.list_for_host(h.id or 0)
+            if p.state == "open"
+        )
+        findings = len(FindingRepository(conn).list_for_project(pid))
+
         client = project.client if project and project.client else "—"
         scope_line = (
             f"in: {', '.join(includes) or '—'}"
@@ -91,7 +118,9 @@ class DashboardScreen(Screen[None]):
         return (
             f"[b]{self.engagement.name}[/b]   client: {client}\n"
             f"scope: {scope_line}\n"
-            f"targets: {', '.join(targets) or '—'}"
+            f"targets: {', '.join(targets) or '—'}\n"
+            f"results: {len(hosts)} hosts, {open_ports} open ports, {findings} findings"
+            "   ([b]r[/b] to browse)"
         )
 
     def action_new_scan(self) -> None:

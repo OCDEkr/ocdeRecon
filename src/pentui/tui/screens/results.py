@@ -31,7 +31,7 @@ class ResultsScreen(Screen[None]):
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
-        ("q", "quit", "Quit"),
+        ("q", "app.quit", "Quit"),
     ]
 
     def __init__(self, engagement: Engagement) -> None:

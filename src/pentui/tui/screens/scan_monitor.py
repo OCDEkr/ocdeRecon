@@ -38,7 +38,7 @@ class ScanMonitorScreen(Screen[None]):
     BINDINGS = [
         ("r", "view_results", "Results"),
         ("escape", "app.pop_screen", "Back"),
-        ("q", "quit", "Quit"),
+        ("q", "app.quit", "Quit"),
     ]
 
     def __init__(

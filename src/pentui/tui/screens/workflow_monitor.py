@@ -39,7 +39,7 @@ class WorkflowMonitorScreen(Screen[None]):
     BINDINGS = [
         ("r", "results", "Results"),
         ("escape", "app.pop_screen", "Back"),
-        ("q", "quit", "Quit"),
+        ("q", "app.quit", "Quit"),
     ]
 
     def __init__(
