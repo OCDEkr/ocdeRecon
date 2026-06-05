@@ -10,7 +10,20 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from pentui.core.models import Finding, Host, Port, Project, Scan, Service, Severity
+from pentui.core.models import (
+    Finding,
+    Host,
+    Port,
+    Project,
+    Scan,
+    ScanStatus,
+    ScopeKind,
+    ScopeRule,
+    Service,
+    Severity,
+    Target,
+    TargetSource,
+)
 
 
 class ProjectRepository:
@@ -89,6 +102,101 @@ class ScanRepository:
             ),
         )
         self.conn.commit()
+
+    def list_recent(self, project_id: int, limit: int = 20) -> list[Scan]:
+        rows = self.conn.execute(
+            "SELECT * FROM scan WHERE project_id = ? ORDER BY id DESC LIMIT ?;",
+            (project_id, limit),
+        ).fetchall()
+        return [
+            Scan(
+                id=r["id"],
+                project_id=r["project_id"],
+                tool=r["tool"],
+                profile=r["profile"],
+                command_str=r["command_str"],
+                args=json.loads(r["args_json"]) if r["args_json"] else [],
+                status=ScanStatus(r["status"]),
+                exit_code=r["exit_code"],
+                ran_as_root=bool(r["ran_as_root"]),
+                started_at=r["started_at"],
+                finished_at=r["finished_at"],
+                raw_output_path=r["raw_output_path"],
+                artifact_path=r["artifact_path"],
+                step_run_id=r["step_run_id"],
+            )
+            for r in rows
+        ]
+
+
+class ScopeRuleRepository:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def create(self, project_id: int, value: str, kind: ScopeKind) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO scope_rule (project_id, value, kind) VALUES (?, ?, ?);",
+            (project_id, value, kind.value),
+        )
+        self.conn.commit()
+        assert cur.lastrowid is not None
+        return cur.lastrowid
+
+    def list_for_project(self, project_id: int) -> list[ScopeRule]:
+        rows = self.conn.execute(
+            "SELECT * FROM scope_rule WHERE project_id = ? ORDER BY id;", (project_id,)
+        ).fetchall()
+        return [
+            ScopeRule(id=r["id"], project_id=r["project_id"], value=r["value"],
+                      kind=ScopeKind(r["kind"]))
+            for r in rows
+        ]
+
+
+class TargetRepository:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def create(self, project_id: int, value: str,
+               source: TargetSource = TargetSource.MANUAL) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO target (project_id, value, source) VALUES (?, ?, ?);",
+            (project_id, value, source.value),
+        )
+        self.conn.commit()
+        assert cur.lastrowid is not None
+        return cur.lastrowid
+
+    def list_for_project(self, project_id: int) -> list[Target]:
+        rows = self.conn.execute(
+            "SELECT * FROM target WHERE project_id = ? ORDER BY id;", (project_id,)
+        ).fetchall()
+        return [
+            Target(id=r["id"], project_id=r["project_id"], value=r["value"],
+                   source=TargetSource(r["source"]), added_at=r["added_at"])
+            for r in rows
+        ]
+
+
+class AuditLogRepository:
+    """Append-only record of scope overrides/skips and privilege elevation (§10, §14)."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self.conn = conn
+
+    def log(self, project_id: int | None, action: str, detail: str | None = None) -> None:
+        self.conn.execute(
+            "INSERT INTO audit_log (project_id, action, detail) VALUES (?, ?, ?);",
+            (project_id, action, detail),
+        )
+        self.conn.commit()
+
+    def list_for_project(self, project_id: int) -> list[tuple[str, str, str | None]]:
+        rows = self.conn.execute(
+            "SELECT ts, action, detail FROM audit_log WHERE project_id = ? ORDER BY id;",
+            (project_id,),
+        ).fetchall()
+        return [(r["ts"], r["action"], r["detail"]) for r in rows]
 
 
 class HostRepository:

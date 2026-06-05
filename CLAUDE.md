@@ -7,10 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `pentui` — a Textual-based TUI that wraps and **automates** command-line
 offensive-security tools for authorized penetration testing. Its purpose is to
 **chain tools into workflows** so one tool's output feeds the next without manual
-intervention. **Nmap is the proof of concept.** Currently at **Phase 2**: a tool
-can be configured from a manifest, run with live output, and its output parsed
-into the unified model, persisted to SQLite, and browsed. Scope enforcement
-(Phase 3) and workflow orchestration (Phase 4) are not built yet.
+intervention. **Nmap is the proof of concept.** Currently at **Phase 3**:
+engagements (one SQLite file each) with scope rules and targets; a tool can be
+configured from a manifest and run with live output; out-of-scope targets are
+blocked with a logged override; results are parsed into the unified model,
+persisted, and browsed. Workflow orchestration (Phase 4) is not built yet.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.

@@ -12,7 +12,7 @@ import os
 import re
 import subprocess
 
-from textual import on
+from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
@@ -32,8 +32,15 @@ from pentui.core.executor import ExecutorError, build_argv, preview, requires_ro
 from pentui.core.manifest import OptionType, ToolManifest, ToolOption, ToolProfile
 from pentui.core.models import Scan
 from pentui.core.registry import ToolRegistry
+from pentui.core.scope import ScopeStatus, classify_targets
 from pentui.persistence.engagement import Engagement
-from pentui.persistence.repositories import ScanRepository
+from pentui.persistence.repositories import (
+    AuditLogRepository,
+    ScanRepository,
+    ScopeRuleRepository,
+    TargetRepository,
+)
+from pentui.tui.screens.modals import ScopeBlockModal
 
 _SPLIT = re.compile(r"[\s,]+")
 
@@ -50,7 +57,7 @@ class ToolConfigScreen(Screen[None]):
     Button { margin: 1 1 0 0; }
     """
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "quit", "Quit")]
 
     def __init__(
         self,
@@ -96,7 +103,11 @@ class ToolConfigScreen(Screen[None]):
                 label = option.label + (" [root]" if option.requires_root else "")
                 yield Horizontal(Label(label, classes="field"), widget)
         yield Static("", id="cmd")
-        yield Horizontal(Button("Run scan", variant="primary", id="run"), id="controls")
+        yield Horizontal(
+            Button("Run scan", variant="primary", id="run"),
+            Button("Use project targets", id="load_targets"),
+            id="controls",
+        )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -178,15 +189,24 @@ class ToolConfigScreen(Screen[None]):
     # -- launch ------------------------------------------------------------ #
     @on(Button.Pressed, "#run")
     def _on_run(self) -> None:
+        # Run in a worker so the scope-override modal can use push_screen_wait.
+        self._launch()
+
+    @work
+    async def _launch(self) -> None:
         if self.manifest is None:
             return
-        if not self._current_targets():
+        targets = self._current_targets()
+        if not targets:
             self.notify("Enter at least one target.", severity="warning")
             return
         try:
             self._try_build(sudo=False, scan_dir=None)  # validate
         except ExecutorError as exc:
             self.notify(str(exc), severity="error", title="Invalid command")
+            return
+
+        if not await self._scope_gate(targets):
             return
 
         profile = self._current_profile()
@@ -215,11 +235,54 @@ class ToolConfigScreen(Screen[None]):
         if self.manifest.output.artifact is not None:
             scan.artifact_path = self.manifest.output.artifact.path.format(scan_dir=scan_dir)
         scans.update(scan)
+        if use_sudo:
+            self._audit("sudo_run", scan.command_str)
 
         from pentui.tui.screens.scan_monitor import ScanMonitorScreen
 
         self.app.push_screen(
             ScanMonitorScreen(self.engagement, self.manifest, scan, scan_dir)
+        )
+
+    @on(Button.Pressed, "#load_targets")
+    def _load_targets(self) -> None:
+        saved = TargetRepository(self.engagement.conn).list_for_project(
+            self.engagement.project_id
+        )
+        if not saved:
+            self.notify("No saved targets for this engagement.", severity="warning")
+            return
+        self.query_one("#targets", Input).value = " ".join(t.value for t in saved)
+
+    async def _scope_gate(self, targets: list[str]) -> bool:
+        """Enforce engagement scope. Returns True if the run may proceed.
+
+        Out-of-scope targets block the run; the operator may override, which is
+        recorded in the audit log. With no scope rules defined we warn and allow.
+        """
+        rules = ScopeRuleRepository(self.engagement.conn).list_for_project(
+            self.engagement.project_id
+        )
+        decisions = classify_targets(rules, targets)
+        if decisions and decisions[0].status is ScopeStatus.NO_RULES:
+            self.notify(
+                "No scope defined for this engagement — scanning without a guardrail.",
+                severity="warning",
+            )
+            return True
+        blocked = [d.target for d in decisions if d.blocked]
+        if not blocked:
+            return True
+        overridden = await self.app.push_screen_wait(ScopeBlockModal(blocked))
+        if not overridden:
+            self.notify("Out-of-scope targets — scan cancelled.", severity="warning")
+            return False
+        self._audit("scope_override", "scanned out of scope: " + ", ".join(blocked))
+        return True
+
+    def _audit(self, action: str, detail: str) -> None:
+        AuditLogRepository(self.engagement.conn).log(
+            self.engagement.project_id, action, detail
         )
 
     def _elevate(self) -> bool:

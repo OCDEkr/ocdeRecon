@@ -1,8 +1,8 @@
 """Engagement session — an open engagement DB plus its active project.
 
-Phase 2 bridge: opens (or creates) an engagement database and ensures a single
-default project so scans have somewhere to persist. Phase 3 replaces the default
-project with real project/target management and selection.
+Opens (or creates) an engagement database and ensures its single ``project`` row
+exists (one engagement file = one project). The selection screen drives which
+engagement is opened; scope rules and targets live on that project.
 """
 
 from __future__ import annotations

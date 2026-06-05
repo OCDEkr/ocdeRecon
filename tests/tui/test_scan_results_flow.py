@@ -15,6 +15,8 @@ from pentui.app import PentuiApp
 from pentui.config import AppConfig
 from pentui.persistence.repositories import HostRepository, PortRepository
 
+from ._helpers import start_engagement
+
 FAKE_NMAP = '''#!/usr/bin/env python3
 import sys
 
@@ -66,7 +68,8 @@ def _make_config(tmp_path: Path) -> AppConfig:
 async def test_scan_parses_persists_and_browses(tmp_path):
     config = _make_config(tmp_path)
     app = PentuiApp(config=config)
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(100, 50)) as pilot:
+        await start_engagement(pilot, name="recon", includes="10.0.0.0/24")
         # fakenmap sorts before the packaged nmap, so it's the default tool.
         assert app.screen.manifest.name == "fakenmap"
         app.screen.query_one("#targets", Input).value = "10.0.0.1"

@@ -15,11 +15,12 @@ See [`PROJECT.md`](./PROJECT.md) for the full specification and architecture.
 
 ## Status
 
-Phase 2 — a tool can be configured from a YAML manifest, run from the TUI with
-live output (sudo handled for root-only options), and its output parsed into the
-unified Host→Port→Service model, persisted to a per-engagement SQLite database,
-and browsed in a results screen. Scope enforcement (Phase 3) and workflow
-orchestration (Phase 4) are not built yet. See `PROJECT.md` §16 for the roadmap.
+Phase 3 — engagements (one SQLite file each) hold scope rules and targets; a tool
+can be configured from a YAML manifest and run with live output (sudo handled for
+root-only options); **out-of-scope targets are blocked with a logged override**;
+results are parsed into the unified Host→Port→Service model, persisted, and
+browsed. Workflow orchestration (Phase 4) is not built yet. See `PROJECT.md` §16
+for the roadmap.
 
 ## Quick start (development)
 

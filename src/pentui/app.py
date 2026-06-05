@@ -1,9 +1,8 @@
 """The Textual application shell.
 
-Phase 1: loads the tool registry and opens the tool-config screen so an operator
-can build and run a single command, watching output live. Project selection,
-the workflow builder/monitor, results, and reporting arrive in later phases
-(see PROJECT.md §11, §16).
+Loads the tool registry and opens the engagement-selection screen. From there:
+engagement → dashboard → tool config / results. The workflow builder/monitor and
+reporting arrive in later phases (see PROJECT.md §11, §16).
 """
 
 from __future__ import annotations
@@ -12,8 +11,8 @@ from textual.app import App
 
 from pentui.config import AppConfig
 from pentui.core.registry import build_registry
-from pentui.persistence.engagement import Engagement, open_engagement
-from pentui.tui.screens.tool_config import ToolConfigScreen
+from pentui.persistence.engagement import Engagement
+from pentui.tui.screens.project_select import ProjectSelectScreen
 
 
 class PentuiApp(App[None]):
@@ -25,14 +24,14 @@ class PentuiApp(App[None]):
     def __init__(self, config: AppConfig | None = None) -> None:
         super().__init__()
         self.config = config or AppConfig()
+        #: Set when an engagement is opened from the selection screen.
         self.engagement: Engagement | None = None
 
     def on_mount(self) -> None:
-        self.engagement = open_engagement(self.config)
         registry = build_registry(self.config.user_tools_dir)
         for error in registry.errors:
             self.notify(error, severity="error", title="Manifest error", timeout=10)
-        self.push_screen(ToolConfigScreen(registry, self.engagement, self.config))
+        self.push_screen(ProjectSelectScreen(self.config, registry))
 
 
 def run() -> None:

@@ -13,6 +13,8 @@ from textual.widgets import Input, Static
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
 
+from ._helpers import start_engagement
+
 
 def _make_config(tmp_path: Path) -> AppConfig:
     config = AppConfig(data_dir=tmp_path / "data", config_dir=tmp_path / "config")
@@ -29,7 +31,8 @@ def _make_config(tmp_path: Path) -> AppConfig:
 
 async def test_preview_updates_with_targets(tmp_path):
     app = PentuiApp(config=_make_config(tmp_path))
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(100, 50)) as pilot:
+        await start_engagement(pilot, name="prev")
         app.screen.query_one("#targets", Input).value = "alpha bravo"
         await pilot.pause()
         cmd = str(app.screen.query_one("#cmd", Static).render())
@@ -39,7 +42,8 @@ async def test_preview_updates_with_targets(tmp_path):
 async def test_run_streams_to_completion(tmp_path):
     config = _make_config(tmp_path)
     app = PentuiApp(config=config)
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(100, 50)) as pilot:
+        await start_engagement(pilot, name="streamy")
         app.screen.query_one("#targets", Input).value = "hello world"
         await pilot.pause()
         await pilot.click("#run")
@@ -49,6 +53,6 @@ async def test_run_streams_to_completion(tmp_path):
         status = str(app.screen.query_one("#status", Static).render())
         assert "Done" in status
 
-    logs = list((config.engagement_dir("adhoc") / "scans").glob("*/stdout.log"))
+    logs = list((config.engagement_dir("streamy") / "scans").glob("*/stdout.log"))
     assert len(logs) == 1
     assert logs[0].read_text() == "hello world\n"
