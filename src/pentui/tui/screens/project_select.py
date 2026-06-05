@@ -1,13 +1,14 @@
 """Engagement selection / creation (PROJECT.md §11).
 
 An engagement is one SQLite file under the data dir (one ``project`` row inside).
-This screen lists existing engagements and creates new ones with their scope
-rules and initial targets — the scope is the guardrail every later scan checks.
+This screen lists existing engagements, creates new ones with their scope rules
+and initial targets, and deletes them (with confirmation).
 """
 
 from __future__ import annotations
 
 import re
+import shutil
 from typing import TYPE_CHECKING, cast
 
 from textual import on
@@ -21,6 +22,7 @@ from pentui.core.models import ScopeKind
 from pentui.core.registry import ToolRegistry
 from pentui.persistence.engagement import open_engagement
 from pentui.persistence.repositories import ScopeRuleRepository, TargetRepository
+from pentui.tui.screens.modals import ConfirmModal
 
 if TYPE_CHECKING:
     from pentui.app import PentuiApp
@@ -34,7 +36,7 @@ def _split(value: str) -> list[str]:
 
 
 class ProjectSelectScreen(Screen[None]):
-    """Pick an existing engagement or create a new one."""
+    """Pick an existing engagement, create a new one, or delete one."""
 
     DEFAULT_CSS = """
     ProjectSelectScreen { layout: vertical; }
@@ -44,7 +46,7 @@ class ProjectSelectScreen(Screen[None]):
     Label { padding: 1 0 0 0; }
     """
 
-    BINDINGS = [("q", "app.quit", "Quit")]
+    BINDINGS = [("d", "delete", "Delete"), ("q", "app.quit", "Quit")]
 
     def __init__(self, config: AppConfig, registry: ToolRegistry) -> None:
         super().__init__()
@@ -53,7 +55,7 @@ class ProjectSelectScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Label("Open an engagement:")
+        yield Label("Open an engagement (↑/↓ to select, Enter to open, d to delete):")
         # Populated by _refresh_list() on mount and whenever the screen resumes,
         # so engagements created this session show up when we return here.
         yield ListView(id="existing")
@@ -70,8 +72,7 @@ class ProjectSelectScreen(Screen[None]):
 
     def on_mount(self) -> None:
         self._refresh_list()
-        if not self._existing_engagements():
-            self.query_one("#name", Input).focus()
+        self._focus_default()
 
     def on_screen_resume(self) -> None:
         # Fired when returning from the dashboard — pick up newly created
@@ -79,12 +80,21 @@ class ProjectSelectScreen(Screen[None]):
         self._refresh_list()
         for field in ("#name", "#client", "#includes", "#excludes", "#targets"):
             self.query_one(field, Input).value = ""
+        self._focus_default()
 
     def _refresh_list(self) -> None:
         view = self.query_one("#existing", ListView)
         view.clear()
         for name in self._existing_engagements():
             view.append(ListItem(Label(name), name=name))
+
+    def _focus_default(self) -> None:
+        # Focus the list (so d/↑/↓/Enter work) when there are engagements;
+        # otherwise focus the name field for a fresh create.
+        if self._existing_engagements():
+            self.query_one("#existing", ListView).focus()
+        else:
+            self.query_one("#name", Input).focus()
 
     def _existing_engagements(self) -> list[str]:
         base = self.config.engagements_dir
@@ -110,6 +120,43 @@ class ProjectSelectScreen(Screen[None]):
             )
             return
         self._open(name, create=True)
+
+    # -- delete ------------------------------------------------------------ #
+    def action_delete(self) -> None:
+        view = self.query_one("#existing", ListView)
+        item = view.highlighted_child
+        if item is None or item.name is None:
+            self.notify("No engagement selected to delete.", severity="warning")
+            return
+        name = item.name
+
+        def on_confirm(confirmed: bool | None) -> None:
+            if confirmed:
+                self._delete(name)
+
+        self.app.push_screen(
+            ConfirmModal(
+                "⚠ Delete engagement",
+                f"Delete '{name}'? This removes its database, scans, and reports. "
+                "This cannot be undone.",
+            ),
+            on_confirm,
+        )
+
+    def _delete(self, name: str) -> None:
+        app = cast("PentuiApp", self.app)
+        # Close the connection if this engagement happens to be the open one.
+        if app.engagement is not None and app.engagement.name == name:
+            app.engagement.conn.close()
+            app.engagement = None
+        try:
+            shutil.rmtree(self.config.engagement_dir(name))
+        except OSError as exc:
+            self.notify(f"Could not delete '{name}': {exc}", severity="error")
+            return
+        self.notify(f"Deleted engagement '{name}'.")
+        self._refresh_list()
+        self._focus_default()
 
     def _open(self, name: str, *, create: bool = False) -> None:
         engagement = open_engagement(self.config, name)

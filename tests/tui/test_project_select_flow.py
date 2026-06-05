@@ -8,6 +8,7 @@ from textual.widgets import Input, ListView
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
+from pentui.tui.screens.modals import ConfirmModal
 from pentui.tui.screens.project_select import ProjectSelectScreen
 
 from ._helpers import start_engagement
@@ -54,3 +55,45 @@ async def test_can_open_existing_engagement_from_list(tmp_path):
 
         assert app.engagement is not None
         assert app.engagement.name == "beta"
+
+
+async def test_delete_engagement_with_confirm(tmp_path):
+    config = _config(tmp_path)
+    app = PentuiApp(config=config)
+    async with app.run_test(size=(100, 50)) as pilot:
+        await start_engagement(pilot, name="trash", open_scan=False)
+        await pilot.press("escape")
+        await pilot.pause()
+
+        view = app.screen.query_one("#existing", ListView)
+        view.index = 0
+        await pilot.pause()
+        await pilot.press("d")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmModal)
+        await pilot.click("#confirm")
+        await pilot.pause()
+
+        assert not config.engagement_dir("trash").exists()
+        assert list(app.screen.query_one("#existing", ListView).children) == []
+
+
+async def test_delete_cancel_keeps_engagement(tmp_path):
+    config = _config(tmp_path)
+    app = PentuiApp(config=config)
+    async with app.run_test(size=(100, 50)) as pilot:
+        await start_engagement(pilot, name="keep", open_scan=False)
+        await pilot.press("escape")
+        await pilot.pause()
+
+        app.screen.query_one("#existing", ListView).index = 0
+        await pilot.pause()
+        await pilot.press("d")
+        await pilot.pause()
+        await pilot.click("#cancel")
+        await pilot.pause()
+
+        assert config.engagement_dir("keep").exists()
+        names = [i.name for i in app.screen.query_one("#existing", ListView).children]
+        assert names == ["keep"]

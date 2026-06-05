@@ -9,6 +9,47 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
 
+class ConfirmModal(ModalScreen[bool]):
+    """Generic yes/no confirmation. Dismisses True on confirm, False otherwise."""
+
+    DEFAULT_CSS = """
+    ConfirmModal { align: center middle; }
+    #dialog {
+        width: 70; height: auto; padding: 1 2;
+        border: thick $error; background: $surface;
+    }
+    #title { text-style: bold; color: $error; }
+    Horizontal { height: auto; align: center middle; }
+    Button { margin: 1 1 0 1; }
+    """
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(
+        self, title: str, message: str, *, confirm_label: str = "Delete"
+    ) -> None:
+        super().__init__()
+        self._title = title
+        self._message = message
+        self._confirm_label = confirm_label
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self._title, id="title")
+            yield Static(self._message)
+            with Horizontal():
+                yield Button(self._confirm_label, variant="error", id="confirm")
+                yield Button("Cancel", variant="primary", id="cancel")
+
+    @on(Button.Pressed, "#confirm")
+    def _confirm(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#cancel")
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 class ScopeBlockModal(ModalScreen[bool]):
     """Confirm whether to override out-of-scope targets for a manual run.
 
