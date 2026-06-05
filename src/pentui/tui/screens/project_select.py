@@ -54,11 +54,9 @@ class ProjectSelectScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Label("Open an engagement:")
-        existing = self._existing_engagements()
-        yield ListView(
-            *[ListItem(Label(name), name=name) for name in existing],
-            id="existing",
-        )
+        # Populated by _refresh_list() on mount and whenever the screen resumes,
+        # so engagements created this session show up when we return here.
+        yield ListView(id="existing")
         with Vertical(id="new"):
             yield Label("New engagement")
             yield Input(placeholder="name (letters, digits, - or _)", id="name", classes="field")
@@ -71,8 +69,22 @@ class ProjectSelectScreen(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self._refresh_list()
         if not self._existing_engagements():
             self.query_one("#name", Input).focus()
+
+    def on_screen_resume(self) -> None:
+        # Fired when returning from the dashboard — pick up newly created
+        # engagements and reset the form so the previous name doesn't linger.
+        self._refresh_list()
+        for field in ("#name", "#client", "#includes", "#excludes", "#targets"):
+            self.query_one(field, Input).value = ""
+
+    def _refresh_list(self) -> None:
+        view = self.query_one("#existing", ListView)
+        view.clear()
+        for name in self._existing_engagements():
+            view.append(ListItem(Label(name), name=name))
 
     def _existing_engagements(self) -> list[str]:
         base = self.config.engagements_dir
@@ -92,7 +104,10 @@ class ProjectSelectScreen(Screen[None]):
             self.notify("Name must be letters, digits, - or _.", severity="error")
             return
         if name in self._existing_engagements():
-            self.notify("An engagement with that name already exists.", severity="error")
+            self.notify(
+                "That engagement already exists — select it from the list above to open it.",
+                severity="error",
+            )
             return
         self._open(name, create=True)
 
