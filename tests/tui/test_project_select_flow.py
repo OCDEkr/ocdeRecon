@@ -57,6 +57,20 @@ async def test_can_open_existing_engagement_from_list(tmp_path):
         assert app.engagement.name == "beta"
 
 
+async def test_engagement_list_is_visible(tmp_path):
+    """Regression: the list must get real height (the create form once starved it to 0)."""
+    config = _config(tmp_path)
+    app = PentuiApp(config=config)
+    async with app.run_test(size=(100, 50)) as pilot:
+        await start_engagement(pilot, name="visible", open_scan=False)
+        await pilot.press("escape")
+        await pilot.pause()
+        view = app.screen.query_one("#existing", ListView)
+        # The list once collapsed to height 0; it must now have drawable rows.
+        assert view.size.height >= 1
+        assert len(view.children) == 1
+
+
 async def test_delete_engagement_with_confirm(tmp_path):
     config = _config(tmp_path)
     app = PentuiApp(config=config)

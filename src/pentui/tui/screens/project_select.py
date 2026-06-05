@@ -40,10 +40,10 @@ class ProjectSelectScreen(Screen[None]):
 
     DEFAULT_CSS = """
     ProjectSelectScreen { layout: vertical; }
-    #existing { height: 1fr; border: round $panel; margin: 0 1; }
+    #existing { height: 1fr; min-height: 6; border: round $panel; margin: 0 1; }
     #new { height: auto; border: round $panel; margin: 0 1; padding: 0 1; }
+    #new Label { padding: 0; }
     .field { height: auto; margin-bottom: 1; }
-    Label { padding: 1 0 0 0; }
     """
 
     BINDINGS = [("d", "delete", "Delete"), ("q", "app.quit", "Quit")]
