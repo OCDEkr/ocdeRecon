@@ -18,7 +18,7 @@ from textual.widgets import Button, Checkbox, Footer, Header, Label, ListItem, L
 
 from pentui.config import AppConfig
 from pentui.core.executor import requires_root
-from pentui.core.registry import ToolRegistry
+from pentui.core.registry import ToolRegistry, tool_available
 from pentui.core.workflow import WorkflowDefinition, build_workflow_registry
 from pentui.persistence.engagement import Engagement
 
@@ -83,7 +83,16 @@ class WorkflowLaunchScreen(Screen[None]):
         for step in wf.steps:
             after = f"  after {', '.join(step.after)}" if step.after else ""
             gate = "  [gate]" if step.gate else ""
-            lines.append(f"• {step.id}: {step.tool} ({step.profile or 'manual'}){after}{gate}")
+            manifest = self.registry.get(step.tool)
+            if manifest is None:
+                missing = "  [red](unknown tool)[/red]"
+            elif not tool_available(manifest):
+                missing = "  [yellow](binary not found)[/yellow]"
+            else:
+                missing = ""
+            lines.append(
+                f"• {step.id}: {step.tool} ({step.profile or 'manual'}){after}{gate}{missing}"
+            )
         self.query_one("#detail", Static).update("\n".join(lines))
 
     @on(Button.Pressed, "#launch")

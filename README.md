@@ -15,14 +15,16 @@ See [`PROJECT.md`](./PROJECT.md) for the full specification and architecture.
 
 ## Status
 
-Phase 5. Engagements hold scope rules and targets; tools run from YAML manifests
-with live output and the scope guardrail; results are parsed into the unified
-Host→Port→Service model, persisted, and browsed; a **workflow engine** chains
-tools as a branching DAG — one tool's results feed the next through the
-data-handoff query layer (e.g. *hosts with open 80/443 → gowitness URLs*), with
-approval gates and an unattended mode; and engagements **export to
-Markdown/HTML/JSON/CSV** (including workflow runs for traceability). Remaining
-work is polish (Phase 6). See `PROJECT.md` §16 for the roadmap.
+All six build phases are implemented. Engagements hold scope rules and targets;
+tools run from YAML manifests with live output and the scope guardrail; results
+are parsed into the unified Host→Port→Service model, persisted, and browsed; a
+**workflow engine** chains tools as a branching DAG — one tool's results feed the
+next through the data-handoff query layer (e.g. *hosts with open 80/443 →
+gowitness URLs*), with approval gates and an unattended mode; engagements
+**export to Markdown/HTML/JSON/CSV**; and the UI has blue/white + colour-blind-safe
+themes (F2), tool-availability hints, and an audit-log viewer. Deferred to future
+work (`PROJECT.md` §14): parallel step execution, SQLCipher encryption, PyInstaller
+packaging, scheduled runs.
 
 ## Quick start (development)
 

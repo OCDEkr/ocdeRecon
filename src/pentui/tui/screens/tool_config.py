@@ -31,7 +31,7 @@ from pentui.config import AppConfig
 from pentui.core.executor import ExecutorError, build_argv, preview, requires_root
 from pentui.core.manifest import OptionType, ToolManifest, ToolOption, ToolProfile
 from pentui.core.models import Scan
-from pentui.core.registry import ToolRegistry
+from pentui.core.registry import ToolRegistry, tool_available
 from pentui.core.scope import ScopeStatus, classify_targets
 from pentui.persistence.engagement import Engagement
 from pentui.persistence.repositories import (
@@ -165,9 +165,13 @@ class ToolConfigScreen(Screen[None]):
     def _update_preview(self) -> None:
         try:
             argv = self._try_build(sudo=False, scan_dir=None)
-            self.query_one("#cmd", Static).update(preview(argv))
         except ExecutorError as exc:
             self.query_one("#cmd", Static).update(f"[red]⚠ {exc}[/red]")
+            return
+        text = preview(argv)
+        if self.manifest is not None and not tool_available(self.manifest):
+            text += f"\n[yellow]⚠ '{self.manifest.binary}' not found on PATH[/yellow]"
+        self.query_one("#cmd", Static).update(text)
 
     @on(Select.Changed, "#tool")
     async def _on_tool_changed(self, event: Select.Changed) -> None:

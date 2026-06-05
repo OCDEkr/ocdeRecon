@@ -6,9 +6,11 @@ under the data dir; user-supplied tools/parsers/workflows under the config dir.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 APP_NAME = "pentui"
 
@@ -73,3 +75,18 @@ class AppConfig:
         for path in (self.engagements_dir, self.user_tools_dir,
                      self.user_parsers_dir, self.user_workflows_dir):
             path.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def settings_file(self) -> Path:
+        return self.config_dir / "settings.json"
+
+    def load_settings(self) -> dict[str, Any]:
+        try:
+            data = json.loads(self.settings_file.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save_settings(self, settings: dict[str, Any]) -> None:
+        self.settings_file.parent.mkdir(parents=True, exist_ok=True)
+        self.settings_file.write_text(json.dumps(settings, indent=2))

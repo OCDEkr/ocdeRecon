@@ -7,12 +7,18 @@ aborting startup, so one bad file can't take the whole app down.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from pentui.core.manifest import ManifestError, ToolManifest, load_manifest
 
 #: Packaged manifests ship at <repo>/tools alongside the src/ tree.
 PACKAGED_TOOLS_DIR = Path(__file__).resolve().parents[3] / "tools"
+
+
+def tool_available(manifest: ToolManifest) -> bool:
+    """Whether the tool's binary is resolvable (on PATH or an executable path)."""
+    return shutil.which(manifest.binary) is not None
 
 
 class ToolRegistry:
