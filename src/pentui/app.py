@@ -12,6 +12,7 @@ from textual.app import App
 
 from pentui.config import AppConfig
 from pentui.core.registry import build_registry
+from pentui.persistence.engagement import Engagement, open_engagement
 from pentui.tui.screens.tool_config import ToolConfigScreen
 
 
@@ -24,12 +25,14 @@ class PentuiApp(App[None]):
     def __init__(self, config: AppConfig | None = None) -> None:
         super().__init__()
         self.config = config or AppConfig()
+        self.engagement: Engagement | None = None
 
     def on_mount(self) -> None:
+        self.engagement = open_engagement(self.config)
         registry = build_registry(self.config.user_tools_dir)
         for error in registry.errors:
             self.notify(error, severity="error", title="Manifest error", timeout=10)
-        self.push_screen(ToolConfigScreen(registry, self.config))
+        self.push_screen(ToolConfigScreen(registry, self.engagement, self.config))
 
 
 def run() -> None:

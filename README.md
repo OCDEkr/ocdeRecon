@@ -15,10 +15,11 @@ See [`PROJECT.md`](./PROJECT.md) for the full specification and architecture.
 
 ## Status
 
-Phase 1 — a tool can be configured from a YAML manifest and run from the TUI with
-live output streaming (sudo handled for root-only options). Result normalization
-(Phase 2) and workflow orchestration (Phase 4) are not built yet. See
-`PROJECT.md` §16 for the roadmap.
+Phase 2 — a tool can be configured from a YAML manifest, run from the TUI with
+live output (sudo handled for root-only options), and its output parsed into the
+unified Host→Port→Service model, persisted to a per-engagement SQLite database,
+and browsed in a results screen. Scope enforcement (Phase 3) and workflow
+orchestration (Phase 4) are not built yet. See `PROJECT.md` §16 for the roadmap.
 
 ## Quick start (development)
 

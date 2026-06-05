@@ -148,6 +148,8 @@ class Finding(BaseModel):
     title: str
     detail: str | None = None
     created_at: datetime | None = None
+    #: Transient — set by parsers to resolve host_id at merge time; not persisted.
+    host_ip: str | None = None
 
 
 class ScanResult(BaseModel):

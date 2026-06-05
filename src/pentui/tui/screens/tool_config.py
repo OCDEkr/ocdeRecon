@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import time
 
 from textual import on
 from textual.app import ComposeResult
@@ -31,7 +30,10 @@ from textual.widgets import (
 from pentui.config import AppConfig
 from pentui.core.executor import ExecutorError, build_argv, preview, requires_root
 from pentui.core.manifest import OptionType, ToolManifest, ToolOption, ToolProfile
+from pentui.core.models import Scan
 from pentui.core.registry import ToolRegistry
+from pentui.persistence.engagement import Engagement
+from pentui.persistence.repositories import ScanRepository
 
 _SPLIT = re.compile(r"[\s,]+")
 
@@ -50,9 +52,15 @@ class ToolConfigScreen(Screen[None]):
 
     BINDINGS = [("q", "quit", "Quit")]
 
-    def __init__(self, registry: ToolRegistry, config: AppConfig | None = None) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        engagement: Engagement,
+        config: AppConfig | None = None,
+    ) -> None:
         super().__init__()
         self.registry = registry
+        self.engagement = engagement
         self.config = config or AppConfig()
         self.manifest: ToolManifest | None = registry.all()[0] if registry.all() else None
         self._option_widgets: list[tuple[ToolOption, Checkbox | Input | Select[str]]] = []
@@ -181,18 +189,38 @@ class ToolConfigScreen(Screen[None]):
             self.notify(str(exc), severity="error", title="Invalid command")
             return
 
+        profile = self._current_profile()
         need_root = requires_root(
-            self.manifest, profile=self._current_profile(), options=self._current_options()
+            self.manifest, profile=profile, options=self._current_options()
         )
         use_sudo = need_root and os.geteuid() != 0
         if use_sudo and not self._elevate():
             return
 
-        scan_dir = str(self.config.scan_dir("adhoc", int(time.time())))
+        # Create the scan row first so the artifact/log dir keys off its id.
+        scans = ScanRepository(self.engagement.conn)
+        scan = scans.create(
+            Scan(
+                project_id=self.engagement.project_id,
+                tool=self.manifest.name,
+                profile=profile.name if profile else None,
+                ran_as_root=use_sudo,
+            )
+        )
+        assert scan.id is not None
+        scan_dir = str(self.config.scan_dir(self.engagement.name, scan.id))
         argv = self._try_build(sudo=use_sudo, scan_dir=scan_dir)
+        scan.command_str = preview(argv)
+        scan.args = argv
+        if self.manifest.output.artifact is not None:
+            scan.artifact_path = self.manifest.output.artifact.path.format(scan_dir=scan_dir)
+        scans.update(scan)
+
         from pentui.tui.screens.scan_monitor import ScanMonitorScreen
 
-        self.app.push_screen(ScanMonitorScreen(argv, scan_dir))
+        self.app.push_screen(
+            ScanMonitorScreen(self.engagement, self.manifest, scan, scan_dir)
+        )
 
     def _elevate(self) -> bool:
         """Cache sudo credentials by suspending the app and running ``sudo -v``."""
