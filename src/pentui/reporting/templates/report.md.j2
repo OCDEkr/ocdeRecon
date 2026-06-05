@@ -1,0 +1,52 @@
+# Engagement Report — {{ project.name }}
+
+{% if project.client %}**Client:** {{ project.client }}
+{% endif %}**Generated:** {{ generated_at }}
+**Activity window:** {{ date_start or "—" }} → {{ date_end or "—" }}
+
+**Scope (include):** {{ includes | join(", ") if includes else "— none defined —" }}
+**Scope (exclude):** {{ excludes | join(", ") if excludes else "—" }}
+**Targets:** {{ targets | join(", ") if targets else "—" }}
+
+## Summary
+
+- Hosts: {{ hosts | length }}
+- Open ports: {{ open_port_count }}
+- Findings: {{ findings | length }}
+- Scans: {{ scans | length }}
+- Workflow runs: {{ workflow_runs | length }}
+
+## Hosts
+
+{% for h in hosts %}
+### {{ h.ip }}{% if h.hostname %} ({{ h.hostname }}){% endif %} — {{ h.state }}
+
+{% if h.ports %}| Port | State | Service | Product | Version |
+| --- | --- | --- | --- | --- |
+{% for p in h.ports %}| {{ p.number }}/{{ p.protocol }} | {{ p.state }} | {{ (p.service.name or "") if p.service else "" }} | {{ (p.service.product or "") if p.service else "" }} | {{ (p.service.version or "") if p.service else "" }} |
+{% endfor %}{% else %}_No ports recorded._
+{% endif %}
+{% else %}
+_No hosts discovered._
+{% endfor %}
+
+## Findings
+
+{% if findings %}{% for f in findings %}- **[{{ f.severity }}]** {{ f.host_ip or "-" }} — {{ f.title }} _(via {{ f.source_tool }})_
+{% endfor %}{% else %}_No findings._
+{% endif %}
+
+## Scans
+
+{% for s in scans %}- `#{{ s.id }}` **{{ s.tool }}** ({{ s.profile or "manual" }}) — {{ s.status }}, exit {{ s.exit_code if s.exit_code is not none else "—" }}{% if s.ran_as_root %} _[root]_{% endif %}
+  `{{ s.command_str or "" }}`
+{% else %}
+_No scans._
+{% endfor %}
+
+{% if workflow_runs %}## Workflow runs
+
+{% for wr in workflow_runs %}- **{{ wr.run.workflow_name }}** — {{ wr.run.status }}{% if wr.run.unattended %} _(unattended)_{% endif %}
+{% for st in wr.steps %}  - {{ st.step_id }} [{{ st.tool }}] — {{ st.status }} _(gate: {{ st.gate_state }})_
+{% endfor %}{% endfor %}
+{% endif %}

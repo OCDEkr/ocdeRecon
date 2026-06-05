@@ -64,6 +64,10 @@ class AppConfig:
         """Where a scan's raw stdout log and artifacts (e.g. nmap.xml) are written."""
         return self.engagement_dir(engagement) / "scans" / str(scan_id)
 
+    def reports_dir(self, engagement: str) -> Path:
+        """Where exported reports are written for an engagement."""
+        return self.engagement_dir(engagement) / "reports"
+
     def ensure_dirs(self) -> None:
         """Create the base data/config directories if missing."""
         for path in (self.engagements_dir, self.user_tools_dir,

@@ -36,6 +36,7 @@ class DashboardScreen(Screen[None]):
         ("n", "new_scan", "New scan"),
         ("w", "workflows", "Workflows"),
         ("r", "results", "Results"),
+        ("e", "export", "Export"),
         ("escape", "app.pop_screen", "Engagements"),
         ("q", "quit", "Quit"),
     ]
@@ -110,3 +111,8 @@ class DashboardScreen(Screen[None]):
         from pentui.tui.screens.results import ResultsScreen
 
         self.app.push_screen(ResultsScreen(self.engagement))
+
+    def action_export(self) -> None:
+        from pentui.tui.screens.report_export import ReportExportScreen
+
+        self.app.push_screen(ReportExportScreen(self.engagement, self.config))
