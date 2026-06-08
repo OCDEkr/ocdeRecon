@@ -25,7 +25,10 @@ class PentuiApp(App[None]):
     TITLE = "pentui"
     SUB_TITLE = "offensive-security automation TUI"
 
-    BINDINGS = [("f2", "toggle_theme", "Theme")]
+    BINDINGS = [
+        ("f2", "toggle_theme", "Theme"),
+        ("f3", "clear_sudo", "Clear sudo"),
+    ]
 
     def __init__(self, config: AppConfig | None = None) -> None:
         super().__init__()
@@ -75,6 +78,13 @@ class PentuiApp(App[None]):
             return False
         await proc.communicate((password + "\n").encode())
         return proc.returncode == 0
+
+    def action_clear_sudo(self) -> None:
+        if self.sudo_password is None:
+            self.notify("No sudo password is cached.")
+        else:
+            self.sudo_password = None
+            self.notify("Sudo password cleared.")
 
     def action_toggle_theme(self) -> None:
         self.theme = next_theme(self.theme)

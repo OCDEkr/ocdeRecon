@@ -36,6 +36,15 @@ async def test_cached_sudo_password_returns_without_prompt(tmp_path):
         assert await app.request_sudo_password() == "preset"
 
 
+async def test_clear_sudo_password(tmp_path):
+    app = PentuiApp(config=_config(tmp_path))
+    async with app.run_test(size=(100, 40)) as pilot:
+        app.sudo_password = "preset"
+        await pilot.press("f3")
+        await pilot.pause()
+        assert app.sudo_password is None
+
+
 async def test_root_tool_prompts_for_password(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("running as root; no sudo prompt expected")
