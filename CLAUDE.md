@@ -82,9 +82,10 @@ TUI (Textual)  →  Core (engine)  →  Persistence (SQLite) + Reporting
   `repositories.py` (model↔row CRUD).
 - `src/pentui/reporting/` — exporters for Markdown/HTML/JSON/CSV (§12).
 - `src/pentui/tui/` — Textual screens/widgets (§11).
-- `tools/`, `workflows/` — declarative YAML (also loaded from
-  `~/.config/pentui/{tools,parsers,workflows}/`). Adding a simple tool is a new
-  manifest, not code.
+- `src/pentui/tools/`, `src/pentui/workflows/` — declarative YAML bundled with the
+  package (so they ship in a wheel/pipx install), also loaded from
+  `~/.config/pentui/{tools,workflows}/`. Adding a simple tool is a new manifest,
+  not code.
 
 ## Conventions & invariants (do not violate)
 

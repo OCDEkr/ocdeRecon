@@ -12,8 +12,9 @@ from pathlib import Path
 
 from pentui.core.manifest import ManifestError, ToolManifest, load_manifest
 
-#: Packaged manifests ship at <repo>/tools alongside the src/ tree.
-PACKAGED_TOOLS_DIR = Path(__file__).resolve().parents[3] / "tools"
+#: Packaged manifests ship inside the package (src/pentui/tools) so they're found
+#: whether pentui is installed as a wheel/pipx or run from a checkout.
+PACKAGED_TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
 
 
 def tool_available(manifest: ToolManifest) -> bool:

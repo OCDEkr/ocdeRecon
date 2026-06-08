@@ -229,8 +229,8 @@ def save_workflow(wf: WorkflowDefinition, path: str | Path) -> Path:
     return path
 
 
-#: Packaged workflows ship at <repo>/workflows alongside the src/ tree.
-PACKAGED_WORKFLOWS_DIR = Path(__file__).resolve().parents[3] / "workflows"
+#: Packaged workflows ship inside the package (src/pentui/workflows).
+PACKAGED_WORKFLOWS_DIR = Path(__file__).resolve().parents[1] / "workflows"
 
 
 class WorkflowRegistry:

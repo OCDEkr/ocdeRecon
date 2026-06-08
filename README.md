@@ -50,7 +50,40 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-pentui                 # launch the TUI (placeholder in Phase 0)
+pentui                 # launch the TUI
 pytest                 # run tests
 ruff check . && mypy src
 ```
+
+## Install on another machine (Kali)
+
+`pentui` needs Python 3.11+ and the CLI tools it wraps (`nmap`, `masscan`,
+`gowitness`, `netexec`/`nxc`, `responder`, `impacket`/`ntlmrelayx`, `mitm6`, …);
+install those via `apt`/`pipx` as needed — pentui only orchestrates them, and
+unavailable tools are flagged in the UI.
+
+Recommended (isolated CLI install with [pipx]):
+
+```bash
+sudo apt install -y pipx          # if not present
+# copy the repo to the target (git clone from your team remote, or scp/rsync):
+#   rsync -a --exclude .venv --exclude '*.db' nmapTUI/ user@host:~/nmapTUI/
+cd ~/nmapTUI
+pipx install .                    # bundles the tool manifests + workflows
+pentui                            # on PATH for that user
+# later: cd ~/nmapTUI && git pull && pipx reinstall pentui
+```
+
+Or a plain venv:
+
+```bash
+cd ~/nmapTUI
+python3 -m venv .venv && source .venv/bin/activate
+pip install .                     # (or -e . for development)
+pentui
+```
+
+Per-user data lives under `~/.local/share/pentui/` (engagements: SQLite DBs,
+scan artifacts, reports) and `~/.config/pentui/` (settings, and your own
+`tools/`/`workflows/` overrides). Don't copy `.venv/` or `*.db` between machines.
+Root-requiring tools elevate per-command via `sudo`.

@@ -141,10 +141,10 @@ nmapTUI/
         results.py           # host tree → ports → services; findings
         report.py            # export wizard
       widgets/
-  tools/                     # shipped tool manifests
-    nmap.yaml
-  workflows/                 # shipped workflow definitions
-    web-recon.yaml
+    tools/                   # shipped tool manifests (bundled in the package)
+      nmap.yaml
+    workflows/               # shipped workflow definitions (bundled)
+      web-recon.yaml
   tests/
     unit/                    # core logic, parsers, scope, query, workflow engine
     tui/                     # Textual Pilot-driven UI tests
