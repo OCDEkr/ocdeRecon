@@ -17,7 +17,8 @@ output:
   stream: stdout          # gowitness writes screenshots/DB to its own store
 
 options:
-  - {flag: "-f", label: "Input file (nmap XML / URL list)", type: value, placeholder: "e.g. nmap.xml"}
+  - {flag: "-f", label: "Input (nmap XML, or a directory of them)", type: value,
+     placeholder: "nmap.xml or a dir of *.xml", file_input: true, file_glob: "*.xml"}
   - {flag: "--write-screenshots", label: "Write screenshots to disk", type: bool}
   - {flag: "--write-db", label: "Write results to the gowitness DB", type: bool}
   - {flag: "--log-scan-errors", label: "Log scan errors", type: bool}

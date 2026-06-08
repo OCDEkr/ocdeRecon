@@ -11,13 +11,48 @@ from pentui.core.executor import (
     ExecutorError,
     Process,
     build_argv,
+    build_runs,
     preview,
     requires_root,
     run_command,
     terminate_process,
 )
-from pentui.core.manifest import load_manifest
+from pentui.core.manifest import OptionType, ToolManifest, ToolOption, load_manifest
 from pentui.core.registry import PACKAGED_TOOLS_DIR
+
+
+def _file_input_manifest() -> ToolManifest:
+    return ToolManifest(
+        name="batch",
+        binary="echo",
+        options=[ToolOption(flag="-f", label="file", type=OptionType.VALUE,
+                            file_input=True, file_glob="*.xml")],
+    )
+
+
+def test_build_runs_batches_over_directory(tmp_path):
+    d = tmp_path / "scans"
+    d.mkdir()
+    (d / "a.xml").write_text("a")
+    (d / "b.xml").write_text("b")
+    (d / "skip.txt").write_text("c")
+    runs = build_runs(_file_input_manifest(), options={"-f": str(d)})
+    assert [label for label, _ in runs] == ["a.xml", "b.xml"]  # *.xml only, sorted
+    first = runs[0][1]
+    assert first[first.index("-f") + 1].endswith("a.xml")
+
+
+def test_build_runs_single_for_a_file(tmp_path):
+    f = tmp_path / "a.xml"
+    f.write_text("x")
+    runs = build_runs(_file_input_manifest(), options={"-f": str(f)})
+    assert len(runs) == 1
+    assert runs[0][0] == ""
+
+
+def test_build_runs_single_without_file_input():
+    runs = build_runs(ToolManifest(name="t", binary="echo"), targets=["x"])
+    assert len(runs) == 1 and runs[0][0] == ""
 
 
 @pytest.fixture

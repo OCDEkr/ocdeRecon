@@ -32,7 +32,9 @@ from pentui.config import AppConfig
 from pentui.core.executor import (
     ExecutorError,
     build_argv,
+    build_runs,
     config_tokens,
+    file_input_batch,
     preview,
     requires_root,
 )
@@ -197,8 +199,12 @@ class ToolConfigScreen(Screen[None]):
             self.query_one("#cmd", Static).update(f"[red]⚠ {exc}[/red]")
             return
         text = preview(argv)
-        if self.manifest is not None and not tool_available(self.manifest):
-            text += f"\n[yellow]⚠ '{self.manifest.binary}' not found on PATH[/yellow]"
+        if self.manifest is not None:
+            batch = file_input_batch(self.manifest, self._current_options())
+            if batch is not None:
+                text += f"\n[cyan]↻ batch: once per file in directory ({len(batch)} matched)[/cyan]"
+            if not tool_available(self.manifest):
+                text += f"\n[yellow]⚠ '{self.manifest.binary}' not found on PATH[/yellow]"
         self.query_one("#cmd", Static).update(text)
 
     @on(Select.Changed, "#tool")
@@ -228,23 +234,25 @@ class ToolConfigScreen(Screen[None]):
     async def _launch(self) -> None:
         if self.manifest is None:
             return
-        targets = self._current_targets()
-        if not targets:
-            self.notify("Enter at least one target.", severity="warning")
-            return
         try:
-            self._try_build(sudo=False, scan_dir=None)  # validate
+            self._try_build(sudo=False, scan_dir=None)  # validate options/extra args
         except ExecutorError as exc:
             self.notify(str(exc), severity="error", title="Invalid command")
+            return
+
+        options = self._current_options()
+        targets = self._current_targets()
+        # A file-input option pointed at a directory batches once per matching file.
+        batch = file_input_batch(self.manifest, options)
+        if batch is not None and not batch:
+            self.notify("No matching files in that directory.", severity="warning")
             return
 
         if not await self._scope_gate(targets):
             return
 
         profile = self._current_profile()
-        need_root = requires_root(
-            self.manifest, profile=profile, options=self._current_options()
-        )
+        need_root = requires_root(self.manifest, profile=profile, options=options)
         use_sudo = need_root and os.geteuid() != 0
         if use_sudo and not self._elevate():
             return
@@ -261,9 +269,13 @@ class ToolConfigScreen(Screen[None]):
         )
         assert scan.id is not None
         scan_dir = str(self.config.scan_dir(self.engagement.name, scan.id))
-        argv = self._try_build(sudo=use_sudo, scan_dir=scan_dir)
-        scan.command_str = preview(argv)
-        scan.args = argv
+        runs = build_runs(
+            self.manifest, profile=profile, options=options,
+            extra_args=self._extra_args(), targets=targets, scan_dir=scan_dir, sudo=use_sudo,
+        )
+        note = f"   (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
+        scan.command_str = preview(runs[0][1]) + note
+        scan.args = runs[0][1]
         if self.manifest.output.artifact is not None:
             scan.artifact_path = self.manifest.output.artifact.path.format(scan_dir=scan_dir)
         scans.update(scan)
@@ -273,7 +285,7 @@ class ToolConfigScreen(Screen[None]):
         from pentui.tui.screens.scan_monitor import ScanMonitorScreen
 
         self.app.push_screen(
-            ScanMonitorScreen(self.engagement, self.manifest, scan, scan_dir)
+            ScanMonitorScreen(self.engagement, self.manifest, scan, scan_dir, runs)
         )
 
     @on(Button.Pressed, "#load_targets")

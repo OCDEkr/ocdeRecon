@@ -44,6 +44,10 @@ class ToolOption(BaseModel):
     default: str | None = None
     #: Join flag and value into a single token (e.g. "-T4" instead of "-T", "4").
     attached: bool = False
+    #: This value option takes a file; if the operator points it at a directory,
+    #: the run is batched once per file matching ``file_glob`` (e.g. gowitness -f).
+    file_input: bool = False
+    file_glob: str = "*"
 
     model_config = {"populate_by_name": True}
 

@@ -165,6 +165,55 @@ def build_argv(
     return argv
 
 
+def file_input_batch(manifest: ToolManifest, options: OptionValues) -> list[Path] | None:
+    """Files to batch over, or None if this run isn't a directory batch.
+
+    Returns the matching files when a ``file_input`` option points at a directory
+    (sorted); ``None`` when no file-input option is a directory (a single run).
+    """
+    option = next((o for o in manifest.options if o.file_input), None)
+    if option is None:
+        return None
+    value = options.get(option.flag)
+    if not isinstance(value, str) or not value or not Path(value).is_dir():
+        return None
+    return [p for p in sorted(Path(value).glob(option.file_glob)) if p.is_file()]
+
+
+def build_runs(
+    manifest: ToolManifest,
+    *,
+    profile: ToolProfile | None = None,
+    options: OptionValues | None = None,
+    extra_args: Sequence[str] | None = None,
+    targets: Sequence[str] | None = None,
+    scan_dir: str | Path | None = None,
+    sudo: bool = False,
+) -> list[tuple[str, list[str]]]:
+    """Build the argv(s) for a run as ``(label, argv)`` pairs.
+
+    A single ``("", argv)`` normally; one entry per file (labelled by file name)
+    when a ``file_input`` option points at a directory (batch-over-directory).
+    """
+    options = dict(options or {})
+    batch = file_input_batch(manifest, options)
+    if batch is not None:
+        option = next(o for o in manifest.options if o.file_input)
+        runs: list[tuple[str, list[str]]] = []
+        for path in batch:
+            argv = build_argv(
+                manifest, profile=profile, options={**options, option.flag: str(path)},
+                extra_args=extra_args, targets=targets, scan_dir=scan_dir, sudo=sudo,
+            )
+            runs.append((path.name, argv))
+        return runs
+    argv = build_argv(
+        manifest, profile=profile, options=options, extra_args=extra_args,
+        targets=targets, scan_dir=scan_dir, sudo=sudo,
+    )
+    return [("", argv)]
+
+
 def config_tokens(
     manifest: ToolManifest,
     *,

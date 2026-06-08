@@ -1,14 +1,16 @@
 """Scan monitor screen (PROJECT.md §11).
 
-Runs one command, streams its merged stdout/stderr live (teed to disk by the
-executor), then — if the tool has a parser — parses the artifact into the unified
-model and persists it, reporting a short summary. Concurrent-scan tabs arrive
-with the workflow engine in Phase 4.
+Runs one or more commands (a batch-over-directory expands to several), streaming
+merged stdout/stderr live and teeing to an aggregate ``stdout.log``. For a single
+run of a tool with a parser, the artifact is parsed into the unified model. Stop
+with ``s`` (terminates the running process; remaining batch items are skipped).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+from typing import TextIO
 
 from textual import work
 from textual.app import ComposeResult
@@ -32,7 +34,7 @@ from pentui.persistence.store import merge_scan_result
 
 
 class ScanMonitorScreen(Screen[None]):
-    """Live output + result persistence for a single command."""
+    """Live output + result persistence for a scan (one or many commands)."""
 
     DEFAULT_CSS = """
     ScanMonitorScreen { layout: vertical; }
@@ -54,16 +56,20 @@ class ScanMonitorScreen(Screen[None]):
         manifest: ToolManifest,
         scan: Scan,
         scan_dir: str,
+        runs: list[tuple[str, list[str]]],
     ) -> None:
         super().__init__()
         self.engagement = engagement
         self.manifest = manifest
         self.scan = scan
         self.scan_dir = scan_dir
-        self.argv = scan.args
+        self.runs = runs
         self._proc: Process | None = None
+        self._stopped = False
+        self._log: TextIO | None = None
 
     def action_stop(self) -> None:
+        self._stopped = True
         if self._proc is not None and self._proc.returncode is None:
             self.query_one("#status", Static).update("[yellow]Stopping…[/yellow]")
             terminate_process(self._proc)
@@ -71,8 +77,10 @@ class ScanMonitorScreen(Screen[None]):
             self.notify("Nothing running to stop.", severity="warning")
 
     def compose(self) -> ComposeResult:
+        first = preview(self.runs[0][1]) if self.runs else ""
+        extra = f"   (+{len(self.runs) - 1} more files)" if len(self.runs) > 1 else ""
         yield Header()
-        yield Static(preview(self.argv), id="cmd")
+        yield Static(first + extra, id="cmd")
         yield Static("Running…", id="status")
         yield RichLog(highlight=False, markup=False, wrap=True, id="output")
         yield Footer()
@@ -87,6 +95,8 @@ class ScanMonitorScreen(Screen[None]):
 
     def _emit(self, line: str) -> None:
         self.query_one("#output", RichLog).write(line)
+        if self._log is not None:
+            self._log.write(line + "\n")
 
     def _on_proc(self, proc: Process) -> None:
         self._proc = proc
@@ -99,29 +109,51 @@ class ScanMonitorScreen(Screen[None]):
         self.scan.started_at = datetime.now()
         scans.update(self.scan)
 
+        log_path = Path(self.scan_dir) / "stdout.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._log = log_path.open("w", encoding="utf-8")
+        exit_codes: list[int] = []
         try:
-            result = await run_command(
-                self.argv, scan_dir=self.scan_dir, on_line=self._emit, on_start=self._on_proc
-            )
-        except ExecutorError as exc:
-            self.scan.status = ScanStatus.ERROR
-            self.scan.finished_at = datetime.now()
-            scans.update(self.scan)
-            status.update(f"[red]Failed: {exc}[/red]")
-            return
+            for index, (label, argv) in enumerate(self.runs):
+                if self._stopped:
+                    break
+                if label:
+                    self._emit(f"=== [{index + 1}/{len(self.runs)}] {label} ===")
+                try:
+                    result = await run_command(argv, on_line=self._emit, on_start=self._on_proc)
+                except ExecutorError as exc:
+                    self._emit(f"✗ {exc}")
+                    exit_codes.append(127)
+                    continue
+                exit_codes.append(result.exit_code)
+                if result.stopped:
+                    self._stopped = True
+                    break
+        finally:
+            self._log.close()
+            self._log = None
 
-        self.scan.exit_code = result.exit_code
-        self.scan.raw_output_path = result.stdout_log_path
+        self.scan.raw_output_path = str(log_path)
+        self.scan.exit_code = exit_codes[-1] if exit_codes else None
         self.scan.finished_at = datetime.now()
-        if result.stopped:
+
+        if self._stopped:
             self.scan.status = ScanStatus.CANCELLED
             scans.update(self.scan)
             status.update("[yellow]Stopped[/yellow]")
             return
-        self.scan.status = ScanStatus.DONE if result.exit_code == 0 else ScanStatus.ERROR
-        scans.update(self.scan)
 
-        status.update(self._persist_results() or self._exit_message())
+        ok = all(code == 0 for code in exit_codes)
+        self.scan.status = ScanStatus.DONE if ok else ScanStatus.ERROR
+        scans.update(self.scan)
+        status.update(self._summary(exit_codes, ok))
+
+    def _summary(self, exit_codes: list[int], ok: bool) -> str:
+        if len(self.runs) > 1:
+            passed = sum(1 for c in exit_codes if c == 0)
+            colour = "green" if ok else "yellow"
+            return f"[{colour}]Done — {passed}/{len(self.runs)} files succeeded[/{colour}]"
+        return self._persist_results() or self._exit_message()
 
     def _exit_message(self) -> str:
         if self.scan.exit_code == 0:
@@ -131,7 +163,7 @@ class ScanMonitorScreen(Screen[None]):
     def _persist_results(self) -> str | None:
         """Parse + merge the artifact if the tool has a parser. Returns a summary."""
         parser_name = self.manifest.output.parser
-        if not parser_name:
+        if not parser_name or self.scan.exit_code != 0:
             return None
         parser = get_parser(parser_name)
         if parser is None:

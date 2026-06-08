@@ -23,7 +23,10 @@ A configured scan (profile + options + extra args) can be **saved as a named
 profile** from the scan screen — written as a user-manifest override under
 `~/.config/pentui/tools/` (merged with the tool's existing profiles) and the
 in-memory registry is reloaded so it shows up immediately.
-Running scans/steps can be stopped with `s` (the process group is terminated).
+A manifest option may set `file_input: true` (with `file_glob`); pointing it at a
+directory **batches the run once per matching file** (e.g. gowitness `-f` over a
+folder of nmap XMLs). Running scans/steps can be stopped with `s` (the process
+group is terminated).
 Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
 ntlmrelayx, mitm6, nessus. Deferred to future work (§14): parallel step execution,
 SQLCipher-encrypted engagements, PyInstaller packaging, scheduled runs.
