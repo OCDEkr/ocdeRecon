@@ -39,6 +39,18 @@ class ToolRegistry:
                 continue
             self._tools[manifest.name] = manifest  # later dirs override earlier
 
+    def reload(self, *directories: str | Path) -> None:
+        """Re-scan the packaged dir plus ``directories`` in place.
+
+        Mutates this instance so screens already holding it see the new tools
+        (e.g. after saving a profile to a user manifest).
+        """
+        self._tools.clear()
+        self.errors.clear()
+        self.load_dir(PACKAGED_TOOLS_DIR)
+        for directory in directories:
+            self.load_dir(directory)
+
     def get(self, name: str) -> ToolManifest | None:
         return self._tools.get(name)
 

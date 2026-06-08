@@ -6,7 +6,49 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, Static
+from textual.widgets import Button, Input, Label, Static
+
+
+class TextPromptModal(ModalScreen[str | None]):
+    """Prompt for a single line of text. Dismisses the value, or None if cancelled."""
+
+    DEFAULT_CSS = """
+    TextPromptModal { align: center middle; }
+    #dialog {
+        width: 60; height: auto; padding: 1 2;
+        border: thick $primary; background: $surface;
+    }
+    #title { text-style: bold; }
+    Horizontal { height: auto; align: center middle; }
+    Button { margin: 1 1 0 1; }
+    """
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, title: str, placeholder: str = "") -> None:
+        super().__init__()
+        self._title = title
+        self._placeholder = placeholder
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self._title, id="title")
+            yield Input(placeholder=self._placeholder, id="value")
+            with Horizontal():
+                yield Button("Save", variant="primary", id="ok")
+                yield Button("Cancel", id="cancel")
+
+    def on_mount(self) -> None:
+        self.query_one("#value", Input).focus()
+
+    @on(Input.Submitted, "#value")
+    @on(Button.Pressed, "#ok")
+    def _ok(self) -> None:
+        self.dismiss(self.query_one("#value", Input).value.strip() or None)
+
+    @on(Button.Pressed, "#cancel")
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class ConfirmModal(ModalScreen[bool]):

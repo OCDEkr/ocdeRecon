@@ -116,3 +116,16 @@ def load_manifest(path: str | Path) -> ToolManifest:
         return ToolManifest.model_validate(raw)
     except ValidationError as exc:
         raise ManifestError(f"{path}: invalid manifest:\n{exc}") from exc
+
+
+def save_manifest(manifest: ToolManifest, path: str | Path) -> Path:
+    """Serialize a manifest to YAML that ``load_manifest`` round-trips.
+
+    Used for user-manifest overrides (e.g. saving a new profile). Emits only
+    non-default fields so the file stays readable.
+    """
+    data = manifest.model_dump(by_alias=True, exclude_none=True, exclude_defaults=True, mode="json")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    return path

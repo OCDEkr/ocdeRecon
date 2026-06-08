@@ -165,6 +165,25 @@ def build_argv(
     return argv
 
 
+def config_tokens(
+    manifest: ToolManifest,
+    *,
+    profile: ToolProfile | None = None,
+    options: OptionValues | None = None,
+    extra_args: Sequence[str] | None = None,
+) -> list[str]:
+    """The configuration tokens for a run — profile args + options + extra args.
+
+    Excludes the binary, artifact flags, targets, and sudo, so the result is
+    suitable for saving as a reusable profile's ``args``.
+    """
+    tokens = list(profile.args) if profile is not None else []
+    tokens.extend(_option_tokens(manifest, options or {}))
+    if extra_args:
+        tokens.extend(extra_args)
+    return tokens
+
+
 def preview(argv: Sequence[str]) -> str:
     """Human-readable command line for display (not for execution)."""
     return shlex.join(argv)

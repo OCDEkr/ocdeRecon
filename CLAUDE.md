@@ -19,6 +19,10 @@ shows a live command preview and takes free-form extra args (not just profiles).
 Every
 screen that lists tools is driven by the registry, so adding a manifest makes the
 tool available in manual scans, the builder, and workflows with no code change.
+A configured scan (profile + options + extra args) can be **saved as a named
+profile** from the scan screen — written as a user-manifest override under
+`~/.config/pentui/tools/` (merged with the tool's existing profiles) and the
+in-memory registry is reloaded so it shows up immediately.
 Running scans/steps can be stopped with `s` (the process group is terminated).
 Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
 ntlmrelayx, mitm6, nessus. Deferred to future work (§14): parallel step execution,

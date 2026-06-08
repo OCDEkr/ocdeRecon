@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 
 from textual import on, work
@@ -28,8 +29,20 @@ from textual.widgets import (
 )
 
 from pentui.config import AppConfig
-from pentui.core.executor import ExecutorError, build_argv, preview, requires_root
-from pentui.core.manifest import OptionType, ToolManifest, ToolOption, ToolProfile
+from pentui.core.executor import (
+    ExecutorError,
+    build_argv,
+    config_tokens,
+    preview,
+    requires_root,
+)
+from pentui.core.manifest import (
+    OptionType,
+    ToolManifest,
+    ToolOption,
+    ToolProfile,
+    save_manifest,
+)
 from pentui.core.models import Scan
 from pentui.core.registry import ToolRegistry, tool_available
 from pentui.core.scope import ScopeStatus, classify_targets
@@ -40,7 +53,7 @@ from pentui.persistence.repositories import (
     ScopeRuleRepository,
     TargetRepository,
 )
-from pentui.tui.screens.modals import ScopeBlockModal
+from pentui.tui.screens.modals import ScopeBlockModal, TextPromptModal
 
 _SPLIT = re.compile(r"[\s,]+")
 
@@ -102,10 +115,16 @@ class ToolConfigScreen(Screen[None]):
                 self._option_widgets.append((option, widget))
                 label = option.label + (" [root]" if option.requires_root else "")
                 yield Horizontal(Label(label, classes="field"), widget)
+        yield Horizontal(
+            Label("Extra args:"),
+            Input(placeholder="any flags, e.g. --top-ports 100", id="extra-args"),
+            classes="field",
+        )
         yield Static("", id="cmd")
         yield Horizontal(
             Button("Run scan", variant="primary", id="run"),
             Button("Use project targets", id="load_targets"),
+            Button("Save as profile", id="save-profile"),
             id="controls",
         )
         yield Footer()
@@ -151,12 +170,19 @@ class ToolConfigScreen(Screen[None]):
         raw = self.query_one("#targets", Input).value.strip()
         return [t for t in _SPLIT.split(raw) if t]
 
+    def _extra_args(self) -> list[str]:
+        try:
+            return shlex.split(self.query_one("#extra-args", Input).value)
+        except ValueError as exc:
+            raise ExecutorError("unbalanced quotes in extra args") from exc
+
     def _try_build(self, *, sudo: bool, scan_dir: str | None) -> list[str]:
         assert self.manifest is not None
         return build_argv(
             self.manifest,
             profile=self._current_profile(),
             options=self._current_options(),
+            extra_args=self._extra_args(),
             targets=self._current_targets(),
             scan_dir=scan_dir or "{scan_dir}",
             sudo=sudo,
@@ -257,6 +283,45 @@ class ToolConfigScreen(Screen[None]):
             self.notify("No saved targets for this engagement.", severity="warning")
             return
         self.query_one("#targets", Input).value = " ".join(t.value for t in saved)
+
+    @on(Button.Pressed, "#save-profile")
+    def _on_save_profile(self) -> None:
+        if self.manifest is None:
+            return
+        try:
+            tokens = config_tokens(
+                self.manifest,
+                profile=self._current_profile(),
+                options=self._current_options(),
+                extra_args=self._extra_args(),
+            )
+        except ExecutorError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        if not tokens:
+            self.notify("Set a profile, options, or extra args first.", severity="warning")
+            return
+        manifest = self.manifest
+
+        def on_name(name: str | None) -> None:
+            if name:
+                self._write_profile(manifest, name, tokens)
+
+        self.app.push_screen(
+            TextPromptModal(f"Save current {manifest.name} config as profile:", "profile name"),
+            on_name,
+        )
+
+    def _write_profile(self, manifest: ToolManifest, name: str, tokens: list[str]) -> None:
+        # Write a full user-manifest override merging the new profile in.
+        profiles = [p for p in manifest.profiles if p.name != name]
+        profiles.append(ToolProfile(name=name, args=tokens))
+        updated = manifest.model_copy(update={"profiles": profiles})
+        save_manifest(updated, self.config.user_tools_dir / f"{manifest.name}.yaml")
+        self.registry.reload(self.config.user_tools_dir)
+        self.manifest = self.registry.get(manifest.name)
+        self.query_one("#profile", Select).set_options(self._profile_options())
+        self.notify(f"Saved profile '{name}' for {manifest.name}.")
 
     async def _scope_gate(self, targets: list[str]) -> bool:
         """Enforce engagement scope. Returns True if the run may proceed.

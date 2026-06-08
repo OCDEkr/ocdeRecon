@@ -33,8 +33,10 @@ each step feeds on, mark gates) and save a reusable workflow. Each step shows a
 **live command preview** and takes an **extra-args** field, so you're not limited
 to profiles — you see and tweak the exact command that will run. Adding a manifest
 under
-`tools/` makes the tool show up everywhere automatically. A running scan or
-workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
+`tools/` makes the tool show up everywhere automatically. On the scan screen you
+can **save a configured scan as a named profile** (written to
+`~/.config/pentui/tools/`, merged with the tool's existing profiles). A running
+scan or workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
 nslookup, gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
 
 ## Quick start (development)
