@@ -35,6 +35,7 @@ from pentui.core.executor import ExecutorError, build_argv, preview, requires_ro
 from pentui.core.query import Materializer, QuerySpec, WhereSpec
 from pentui.core.registry import ToolRegistry, tool_available
 from pentui.core.workflow import (
+    FileFrom,
     StepTargets,
     WorkflowDefinition,
     WorkflowError,
@@ -53,6 +54,7 @@ _FEEDS: dict[str, tuple[str, bool]] = {
     "web": ("Web URLs from prior (80/443/8080/8443)", True),
     "smb": ("SMB hosts from prior (445)", True),
     "live": ("Live hosts from prior", True),
+    "files": ("Files from prior step (-f, batched)", True),
 }
 
 
@@ -114,6 +116,7 @@ class WorkflowBuilderScreen(Screen[None]):
             Select([], allow_blank=True, id="step-after"),
             Label("Feed:"),
             Select(_feed_options(), value="project", allow_blank=False, id="step-feed"),
+            Checkbox("Per /24", id="step-foreach"),
             Checkbox("Gate", id="step-gate"),
             Button("Add step", id="add-step"),
             id="addrow2",
@@ -205,6 +208,13 @@ class WorkflowBuilderScreen(Screen[None]):
         if extra is None:
             self.notify("Extra args have unbalanced quotes.", severity="error")
             return
+        feed_kwargs = self._feed_kwargs(str(feed), after)
+        foreach = None
+        if self.query_one("#step-foreach", Checkbox).value:
+            if "input" not in feed_kwargs:
+                self.notify("Per-/24 needs a query feed (web/smb/live).", severity="warning")
+                return
+            foreach = "subnet/24"
 
         step = WorkflowStep(
             id=self._unique_id(tool),
@@ -213,7 +223,8 @@ class WorkflowBuilderScreen(Screen[None]):
             extra_args=extra,
             after=after,
             gate=self.query_one("#step-gate", Checkbox).value,
-            **self._feed_kwargs(str(feed)),
+            foreach=foreach,
+            **feed_kwargs,
         )
         self.steps.append(step)
         self._refresh_steps()
@@ -222,7 +233,7 @@ class WorkflowBuilderScreen(Screen[None]):
             [(s.id, s.id) for s in self.steps]
         )
 
-    def _feed_kwargs(self, feed: str) -> dict[str, object]:
+    def _feed_kwargs(self, feed: str, after: list[str]) -> dict[str, object]:
         if feed == "project":
             return {"targets": StepTargets(**{"from": "project"})}
         if feed == "web":
@@ -232,15 +243,21 @@ class WorkflowBuilderScreen(Screen[None]):
             return {"input": QuerySpec(where=WhereSpec(port_open_in=[445]))}
         if feed == "live":
             return {"input": QuerySpec(where=WhereSpec(host_state="up"))}
+        if feed == "files":
+            return {"file_from": FileFrom(step=after[0], flag="-f")}
         return {}  # "none"
 
     def _feed_label(self, step: WorkflowStep) -> str:
         if step.targets is not None:
-            return "project"
-        if step.input is not None:
+            base = "project"
+        elif step.input is not None:
             where = step.input.where.model_dump(exclude_none=True, exclude_defaults=True)
-            return f"{step.input.as_.value} ⊃ {where}"
-        return "—"
+            base = f"{step.input.as_.value} ⊃ {where}"
+        elif step.file_from is not None:
+            base = f"files from {step.file_from.step} ({step.file_from.flag})"
+        else:
+            base = "—"
+        return f"per-{step.foreach} · {base}" if step.foreach else base
 
     def _refresh_steps(self) -> None:
         table = self.query_one("#steps", DataTable)

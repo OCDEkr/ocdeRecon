@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from pentui.core.models import Finding, Host, Port, Service, Severity
-from pentui.core.query import Materializer, QuerySpec, WhereSpec, run_query
+from pentui.core.query import (
+    Materializer,
+    QuerySpec,
+    WhereSpec,
+    group_by_subnet,
+    run_query,
+)
 from pentui.persistence import db
 from pentui.persistence.repositories import (
     FindingRepository,
@@ -82,6 +88,14 @@ def test_hostname_matches(conn):
 def test_empty_where_returns_all_as_targets(conn):
     # hostname-or-ip for every host, deduped, in ip order
     assert run_query(conn, 1, _q()) == ["web1", "10.0.0.2", "10.0.0.3"]
+
+
+def test_group_by_subnet():
+    hosts = [Host(ip="10.0.1.5"), Host(ip="10.0.1.6"), Host(ip="10.0.2.7"), Host(ip="bad")]
+    groups = dict(group_by_subnet(hosts, 24))
+    assert set(groups) == {"10.0.1.0/24", "10.0.2.0/24"}  # non-IP host skipped
+    assert [h.ip for h in groups["10.0.1.0/24"]] == ["10.0.1.5", "10.0.1.6"]
+    assert [h.ip for h in groups["10.0.2.0/24"]] == ["10.0.2.7"]
 
 
 def test_query_alias_parsing():

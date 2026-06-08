@@ -25,7 +25,11 @@ profile** from the scan screen — written as a user-manifest override under
 in-memory registry is reloaded so it shows up immediately.
 A manifest option may set `file_input: true` (with `file_glob`); pointing it at a
 directory **batches the run once per matching file** (e.g. gowitness `-f` over a
-folder of nmap XMLs). Running scans/steps can be stopped with `s` (the process
+folder of nmap XMLs). A workflow step may `foreach: subnet/24` to **fan out into
+one run per /24** of the hosts its `input` selects, and `file_from: {step, flag}`
+to feed a downstream file-input flag the **collected artifacts** of an upstream
+step (each run's artifact is copied into a per-step dir). The shipped
+`subnet-recon` workflow chains masscan → per-/24 nmap → gowitness this way. Running scans/steps can be stopped with `s` (the process
 group is terminated).
 Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
 ntlmrelayx, mitm6, nessus. Deferred to future work (§14): parallel step execution,

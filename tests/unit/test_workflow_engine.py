@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pentui.config import AppConfig
-from pentui.core.models import ScopeKind, ScopeRule
+from pentui.core.models import Host, ScopeKind, ScopeRule
 from pentui.core.registry import ToolRegistry
 from pentui.core.workflow import StepState, WorkflowDefinition, WorkflowEngine, WorkflowStep
 from pentui.persistence.engagement import open_engagement
@@ -105,6 +105,65 @@ async def test_out_of_scope_target_is_skipped_and_logged(tmp_path):
     assert engine.states["discover"] is StepState.SKIPPED
     actions = [a for _, a, _ in AuditLogRepository(eng.conn).list_for_project(eng.project_id)]
     assert "scope_skip" in actions
+
+
+FAKE_SHOT = (
+    "#!/usr/bin/env python3\n"
+    "import sys\n"
+    "f = None\n"
+    "for i, a in enumerate(sys.argv):\n"
+    "    if a == '-f':\n"
+    "        f = sys.argv[i + 1]\n"
+    "print('shot', f)\n"
+)
+
+
+def _fanout_setup(tmp_path: Path):
+    config, registry, eng = _setup(tmp_path)
+    # add a fakeshot tool with a file_input -f (batches over a directory)
+    shot = tmp_path / "fakeshot"
+    shot.write_text(FAKE_SHOT)
+    shot.chmod(0o755)
+    (tmp_path / "tools" / "fakeshot.yaml").write_text(
+        f"name: fakeshot\nbinary: {shot}\ntarget: {{mode: append}}\noptions:\n"
+        f"  - {{flag: '-f', label: in, type: value, file_input: true, file_glob: '*.xml'}}\n"
+    )
+    registry.load_dir(tmp_path / "tools")
+    # hosts across two /24s, all up
+    for ip in ("10.0.1.5", "10.0.1.6", "10.0.2.7"):
+        HostRepository(eng.conn).upsert(eng.project_id, Host(ip=ip, state="up"))
+    return config, registry, eng
+
+
+async def test_per_subnet_fanout_then_batch_gowitness(tmp_path):
+    config, registry, eng = _fanout_setup(tmp_path)
+    wf = WorkflowDefinition.model_validate({
+        "name": "fanout",
+        "steps": [
+            {"id": "scan", "tool": "fakenmap", "foreach": "subnet/24",
+             "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"}},
+            {"id": "shots", "tool": "fakeshot", "after": ["scan"],
+             "file_from": {"step": "scan", "flag": "-f"}},
+        ],
+    })
+    run = await WorkflowEngine(eng, registry, config, unattended=True).run(wf)
+
+    assert engine_states_done(eng, run)
+
+    # nmap ran once per /24, each XML collected into the step's artifact dir.
+    artifacts = config.workflow_artifacts_dir(eng.name, run.id, "scan")
+    collected = sorted(p.name for p in artifacts.glob("*.xml"))
+    assert collected == ["10.0.1.0_24.xml", "10.0.2.0_24.xml"]
+
+    # gowitness (fakeshot) batched once per collected file.
+    steps = {s.step_id: s for s in StepRunRepository(eng.conn).list_for_run(run.id)}
+    shots_log = (config.scan_dir(eng.name, steps["shots"].scan_id) / "stdout.log").read_text()
+    assert "10.0.1.0_24.xml" in shots_log and "10.0.2.0_24.xml" in shots_log
+
+
+def engine_states_done(eng, run) -> bool:
+    steps = StepRunRepository(eng.conn).list_for_run(run.id)
+    return all(s.status.value == "done" for s in steps) and len(steps) == 2
 
 
 async def test_declined_gate_skips_step_and_descendants(tmp_path):

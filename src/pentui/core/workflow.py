@@ -14,6 +14,8 @@ a future optimization — see PROJECT.md §16.
 
 from __future__ import annotations
 
+import re
+import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,12 +28,12 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from pentui.config import AppConfig
 from pentui.core.executor import (
     ExecutorError,
-    build_argv,
+    build_runs,
     preview,
     requires_root,
     run_command,
 )
-from pentui.core.manifest import ToolManifest
+from pentui.core.manifest import ToolManifest, ToolProfile
 from pentui.core.models import (
     GateState,
     Scan,
@@ -41,7 +43,7 @@ from pentui.core.models import (
     WorkflowRun,
     WorkflowStatus,
 )
-from pentui.core.query import QuerySpec, run_query
+from pentui.core.query import QuerySpec, group_by_subnet, materialize, run_query, select_hosts
 from pentui.core.registry import ToolRegistry
 from pentui.core.scope import classify_targets
 from pentui.parsers import get_parser
@@ -69,6 +71,13 @@ class StepTargets(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class FileFrom(BaseModel):
+    """Bind a file-input flag to an upstream step's collected-artifact directory."""
+
+    step: str
+    flag: str
+
+
 class WorkflowStep(BaseModel):
     id: str
     tool: str
@@ -79,6 +88,12 @@ class WorkflowStep(BaseModel):
     after: list[str] = Field(default_factory=list)
     targets: StepTargets | None = None
     input: QuerySpec | None = None
+    #: Fan out into one run per group, e.g. "subnet/24" runs once per /24 of the
+    #: hosts selected by ``input``.
+    foreach: str | None = None
+    #: Feed a file-input flag (e.g. gowitness -f) the collected artifacts of an
+    #: upstream step's runs (e.g. the per-/24 nmap XMLs), batching over them.
+    file_from: FileFrom | None = None
     gate: bool = False
     on_failure: str = "stop-branch"  # "stop-branch" | "continue"
 
@@ -103,8 +118,25 @@ class WorkflowDefinition(BaseModel):
             for dep in step.after:
                 if dep not in idset:
                     raise ValueError(f"step {step.id!r} depends on unknown step {dep!r}")
+            if step.foreach is not None:
+                subnet_prefix(step.foreach)  # validates "subnet/<n>"
+                if step.input is None:
+                    raise ValueError(f"step {step.id!r} has 'foreach' but no 'input' query")
+            if step.file_from is not None and step.file_from.step not in idset:
+                raise ValueError(
+                    f"step {step.id!r} file_from references unknown step "
+                    f"{step.file_from.step!r}"
+                )
         topological_order(self.steps)  # raises on cycle
         return self
+
+
+def subnet_prefix(foreach: str) -> int:
+    """Parse a ``foreach`` grouping like 'subnet/24' -> 24. Raises on bad format."""
+    match = re.fullmatch(r"subnet/(\d{1,3})", foreach.strip())
+    if not match or not 0 < int(match.group(1)) <= 128:
+        raise ValueError(f"invalid foreach {foreach!r} (expected 'subnet/<1-128>')")
+    return int(match.group(1))
 
 
 def topological_order(steps: list[WorkflowStep]) -> list[str]:
@@ -163,6 +195,10 @@ def save_workflow(wf: WorkflowDefinition, path: str | Path) -> Path:
             entry["after"] = list(step.after)
         if step.targets is not None:
             entry["targets"] = {"from": step.targets.from_}
+        if step.foreach is not None:
+            entry["foreach"] = step.foreach
+        if step.file_from is not None:
+            entry["file_from"] = {"step": step.file_from.step, "flag": step.file_from.flag}
         if step.input is not None:
             query: dict[str, object] = {"from": step.input.from_, "as": step.input.as_.value}
             where: dict[str, object] = {}
@@ -324,15 +360,10 @@ class WorkflowEngine:
             self._fail(step, f"unknown tool {step.tool!r}")
             return
 
-        targets = self._scope_filter(step, self._resolve_targets(step))
-        if (step.input is not None or step.targets is not None) and not targets:
-            self._skip(step, "no in-scope targets")
-            return
-
         if not await self._gate_ok(step):
             return
 
-        await self._execute(step, manifest, targets)
+        await self._execute(run_row, step, manifest)
 
     def _resolve_targets(self, step: WorkflowStep) -> list[str]:
         if step.input is not None:
@@ -367,70 +398,145 @@ class WorkflowEngine:
         return True
 
     async def _execute(
-        self, step: WorkflowStep, manifest: ToolManifest, targets: list[str]
+        self, run_row: WorkflowRun, step: WorkflowStep, manifest: ToolManifest
     ) -> None:
-        profile = manifest.profile(step.profile) if step.profile else None
-        need_root = requires_root(manifest, profile=profile, options=step.options)
-        use_sudo = need_root and not self.is_root
+        run_id = run_row.id or 0
+        options = dict(step.options)
+        if step.file_from is not None:
+            src = self.config.workflow_artifacts_dir(
+                self.engagement.name, run_id, step.file_from.step
+            )
+            if not src.is_dir() or not any(src.iterdir()):
+                self._skip(step, f"no artifacts collected from {step.file_from.step!r}")
+                return
+            options[step.file_from.flag] = str(src)
 
+        groups = self._run_groups(step)
+        if not groups:
+            self._skip(step, "no in-scope targets")
+            return
+
+        profile = manifest.profile(step.profile) if step.profile else None
+        use_sudo = requires_root(manifest, profile=profile, options=options) and not self.is_root
+        artifacts_out = self.config.workflow_artifacts_dir(self.engagement.name, run_id, step.id)
+
+        all_ok = True
+        last_scan_id: int | None = None
+        for label, targets in groups:
+            ok, scan_id = await self._run_group(
+                step, manifest, profile, options, use_sudo, label, targets, artifacts_out
+            )
+            all_ok = all_ok and ok
+            last_scan_id = scan_id or last_scan_id
+
+        if all_ok:
+            self._done(step, scan_id=last_scan_id)
+        else:
+            self._fail(step, "a run failed", scan_id=last_scan_id)
+
+    def _run_groups(self, step: WorkflowStep) -> list[tuple[str, list[str]]]:
+        """Resolve the run groups: one per /24 for foreach, else a single group."""
+        if step.foreach is not None and step.input is not None:
+            prefix = subnet_prefix(step.foreach)
+            hosts = select_hosts(self.conn, self.project_id, step.input)
+            groups: list[tuple[str, list[str]]] = []
+            for net, group_hosts in group_by_subnet(hosts, prefix):
+                targets = self._scope_filter(step, materialize(group_hosts, step.input))
+                if targets:
+                    groups.append((net.replace("/", "_"), targets))
+            return groups
+        if step.input is not None or step.targets is not None:
+            targets = self._scope_filter(step, self._resolve_targets(step))
+            return [("", targets)] if targets else []
+        return [("", [])]  # no targets (e.g. a file_from step, or a listener)
+
+    async def _run_group(
+        self,
+        step: WorkflowStep,
+        manifest: ToolManifest,
+        profile: ToolProfile | None,
+        options: dict[str, str | bool],
+        use_sudo: bool,
+        label: str,
+        targets: list[str],
+        artifacts_out: Path,
+    ) -> tuple[bool, int | None]:
         scans = ScanRepository(self.conn)
         scan = scans.create(
             Scan(
-                project_id=self.project_id,
-                tool=step.tool,
-                profile=step.profile,
-                ran_as_root=use_sudo,
-                step_run_id=self.step_runs[step.id].id,
+                project_id=self.project_id, tool=step.tool, profile=step.profile,
+                ran_as_root=use_sudo, step_run_id=self.step_runs[step.id].id,
             )
         )
         assert scan.id is not None
-        scan_dir = str(self.config.scan_dir(self.engagement.name, scan.id))
+        scan_dir = self.config.scan_dir(self.engagement.name, scan.id)
         try:
-            argv = build_argv(
-                manifest, profile=profile, options=step.options,
-                extra_args=step.extra_args, targets=targets, scan_dir=scan_dir, sudo=use_sudo,
+            runs = build_runs(
+                manifest, profile=profile, options=options, extra_args=step.extra_args,
+                targets=targets, scan_dir=str(scan_dir), sudo=use_sudo,
             )
         except ExecutorError as exc:
             scan.status = ScanStatus.ERROR
             scans.update(scan)
-            self._fail(step, str(exc), scan_id=scan.id)
-            return
+            self._emit(step.id, "line", f"✗ {exc}")
+            return False, scan.id
 
-        scan.command_str = preview(argv)
-        scan.args = argv
+        note = f"  (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
+        scan.command_str = preview(runs[0][1]) + note
+        scan.args = runs[0][1]
         if manifest.output.artifact is not None:
-            scan.artifact_path = manifest.output.artifact.path.format(scan_dir=scan_dir)
+            scan.artifact_path = manifest.output.artifact.path.format(scan_dir=str(scan_dir))
+        scan.status = ScanStatus.RUNNING
+        scan.started_at = datetime.now()
         scans.update(scan)
         if use_sudo:
             self._audit("sudo_run", scan.command_str)
 
-        self._emit(step.id, "line", f"$ {scan.command_str}")
-        scan.status = ScanStatus.RUNNING
-        scan.started_at = datetime.now()
-        scans.update(scan)
-        try:
-            result = await run_command(
-                argv, scan_dir=scan_dir,
-                on_line=lambda line: self._emit(step.id, "line", line),
-            )
-        except ExecutorError as exc:
-            scan.status = ScanStatus.ERROR
-            scan.finished_at = datetime.now()
-            scans.update(scan)
-            self._fail(step, str(exc), scan_id=scan.id)
-            return
+        prefix = f"[{label}] " if label else ""
+        log_path = scan_dir / "stdout.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        exit_codes: list[int] = []
+        with log_path.open("w", encoding="utf-8") as log:
+            def on_line(line: str) -> None:
+                self._emit(step.id, "line", prefix + line)
+                log.write(line + "\n")
 
-        scan.exit_code = result.exit_code
-        scan.raw_output_path = result.stdout_log_path
+            for sublabel, argv in runs:
+                if sublabel:
+                    self._emit(step.id, "line", f"{prefix}=== {sublabel} ===")
+                self._emit(step.id, "line", f"{prefix}$ {preview(argv)}")
+                try:
+                    result = await run_command(argv, on_line=on_line)
+                except ExecutorError as exc:
+                    self._emit(step.id, "line", f"{prefix}✗ {exc}")
+                    exit_codes.append(127)
+                    continue
+                exit_codes.append(result.exit_code)
+
+        scan.exit_code = exit_codes[-1] if exit_codes else None
+        scan.raw_output_path = str(log_path)
         scan.finished_at = datetime.now()
-        scan.status = ScanStatus.DONE if result.exit_code == 0 else ScanStatus.ERROR
+        ok = bool(exit_codes) and all(code == 0 for code in exit_codes)
+        scan.status = ScanStatus.DONE if ok else ScanStatus.ERROR
         scans.update(scan)
 
-        if result.exit_code == 0:
+        if ok:
             self._persist(scan, manifest)
-            self._done(step, scan_id=scan.id)
-        else:
-            self._fail(step, f"exit code {result.exit_code}", scan_id=scan.id)
+            self._collect_artifact(scan, manifest, artifacts_out, label)
+        return ok, scan.id
+
+    def _collect_artifact(
+        self, scan: Scan, manifest: ToolManifest, artifacts_out: Path, label: str
+    ) -> None:
+        """Copy this run's artifact into the step's shared dir for downstream file_from."""
+        if manifest.output.artifact is None or not scan.artifact_path:
+            return
+        src = Path(scan.artifact_path)
+        if not src.exists():
+            return
+        artifacts_out.mkdir(parents=True, exist_ok=True)
+        name = (label or str(scan.id)) + src.suffix
+        shutil.copyfile(src, artifacts_out / name)
 
     def _persist(self, scan: Scan, manifest: ToolManifest) -> None:
         parser_name = manifest.output.parser
@@ -473,7 +579,7 @@ class WorkflowEngine:
         StepRunRepository(self.conn).update(step_run)
         self._emit(step.id, "status", state.value)
 
-    def _done(self, step: WorkflowStep, *, scan_id: int) -> None:
+    def _done(self, step: WorkflowStep, *, scan_id: int | None) -> None:
         self._transition(step, StepState.DONE, finished=True, scan_id=scan_id)
 
     def _fail(self, step: WorkflowStep, reason: str, *, scan_id: int | None = None) -> None:

@@ -14,6 +14,7 @@ http(s) URL), ``ip_list`` (IP only).
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import sqlite3
 from enum import StrEnum
@@ -79,8 +80,8 @@ def _matches(host: Host, where: WhereSpec, host_findings: set[Severity]) -> bool
     )
 
 
-def run_query(conn: sqlite3.Connection, project_id: int, query: QuerySpec) -> list[str]:
-    """Evaluate ``query`` against the engagement DB, returning materialized targets."""
+def select_hosts(conn: sqlite3.Connection, project_id: int, query: QuerySpec) -> list[Host]:
+    """The hosts (with ports loaded) matching ``query.where`` — before materializing."""
     if query.from_ != "hosts":
         raise ValueError(f"unsupported query source: {query.from_!r}")
 
@@ -95,11 +96,30 @@ def run_query(conn: sqlite3.Connection, project_id: int, query: QuerySpec) -> li
         for finding in FindingRepository(conn).list_for_project(project_id):
             findings_by_host.setdefault(finding.host_id, set()).add(finding.severity)
 
-    selected = [h for h in hosts if _matches(h, query.where, findings_by_host.get(h.id, set()))]
-    return _materialize(selected, query)
+    return [h for h in hosts if _matches(h, query.where, findings_by_host.get(h.id, set()))]
 
 
-def _materialize(hosts: list[Host], query: QuerySpec) -> list[str]:
+def group_by_subnet(hosts: list[Host], prefix: int) -> list[tuple[str, list[Host]]]:
+    """Group hosts by their IPv4/IPv6 network at ``prefix`` bits (e.g. 24 -> /24).
+
+    Returns ``(network, hosts)`` pairs sorted by network. Non-IP hosts are skipped.
+    """
+    groups: dict[str, list[Host]] = {}
+    for host in hosts:
+        try:
+            net = ipaddress.ip_network(f"{host.ip}/{prefix}", strict=False)
+        except ValueError:
+            continue
+        groups.setdefault(str(net), []).append(host)
+    return sorted(groups.items())
+
+
+def run_query(conn: sqlite3.Connection, project_id: int, query: QuerySpec) -> list[str]:
+    """Evaluate ``query`` against the engagement DB, returning materialized targets."""
+    return materialize(select_hosts(conn, project_id, query), query)
+
+
+def materialize(hosts: list[Host], query: QuerySpec) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
 

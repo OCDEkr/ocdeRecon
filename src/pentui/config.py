@@ -70,6 +70,10 @@ class AppConfig:
         """Where exported reports are written for an engagement."""
         return self.engagement_dir(engagement) / "reports"
 
+    def workflow_artifacts_dir(self, engagement: str, run_id: int, step_id: str) -> Path:
+        """Where a workflow step's collected artifacts (e.g. per-/24 nmap XML) go."""
+        return self.engagement_dir(engagement) / "artifacts" / str(run_id) / step_id
+
     def ensure_dirs(self) -> None:
         """Create the base data/config directories if missing."""
         for path in (self.engagements_dir, self.user_tools_dir,

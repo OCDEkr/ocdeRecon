@@ -37,7 +37,10 @@ under
 can **save a configured scan as a named profile** (written to
 `~/.config/pentui/tools/`, merged with the tool's existing profiles). Pointing a
 file-input option (e.g. gowitness `-f`) at a **directory** runs the tool once per
-matching file. A running scan or workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
+matching file. Workflows can **fan out per /24** (`foreach: subnet/24`) and hand a
+downstream tool the **collected artifacts** of an upstream step (`file_from`) —
+see the shipped `subnet-recon` workflow (masscan → per-/24 nmap → gowitness). A
+running scan or workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
 nslookup, gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
 
 ## Quick start (development)
