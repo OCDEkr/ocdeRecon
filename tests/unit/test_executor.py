@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 
 import pytest
 
 from pentui.core.executor import (
     ExecutorError,
+    Process,
     build_argv,
     preview,
     requires_root,
     run_command,
+    terminate_process,
 )
 from pentui.core.manifest import load_manifest
 from pentui.core.registry import PACKAGED_TOOLS_DIR
@@ -99,3 +102,38 @@ async def test_run_command_missing_binary():
 async def test_run_command_nonzero_exit():
     result = await run_command([sys.executable, "-c", "import sys; sys.exit(3)"])
     assert result.exit_code == 3
+    assert result.stopped is False
+
+
+async def test_run_command_can_be_stopped(tmp_path):
+    holder: dict[str, Process] = {}
+    task = asyncio.create_task(
+        run_command(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            scan_dir=tmp_path,
+            on_start=lambda p: holder.setdefault("p", p),
+        )
+    )
+    while "p" not in holder:
+        await asyncio.sleep(0.02)
+    terminate_process(holder["p"])
+    result = await task
+    assert result.stopped
+    assert result.exit_code < 0
+
+
+async def test_run_command_cancellation_terminates_process():
+    holder: dict[str, Process] = {}
+    task = asyncio.create_task(
+        run_command(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            on_start=lambda p: holder.setdefault("p", p),
+        )
+    )
+    while "p" not in holder:
+        await asyncio.sleep(0.02)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0.1)
+    assert holder["p"].returncode is not None  # process was killed, not orphaned

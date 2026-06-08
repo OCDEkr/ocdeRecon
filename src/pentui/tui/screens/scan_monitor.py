@@ -15,7 +15,13 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Footer, Header, RichLog, Static
 
-from pentui.core.executor import ExecutorError, preview, run_command
+from pentui.core.executor import (
+    ExecutorError,
+    Process,
+    preview,
+    run_command,
+    terminate_process,
+)
 from pentui.core.manifest import ToolManifest
 from pentui.core.models import Scan, ScanStatus
 from pentui.parsers import get_parser
@@ -36,6 +42,7 @@ class ScanMonitorScreen(Screen[None]):
     """
 
     BINDINGS = [
+        ("s", "stop", "Stop"),
         ("r", "view_results", "Results"),
         ("escape", "app.pop_screen", "Back"),
         ("q", "app.quit", "Quit"),
@@ -54,6 +61,14 @@ class ScanMonitorScreen(Screen[None]):
         self.scan = scan
         self.scan_dir = scan_dir
         self.argv = scan.args
+        self._proc: Process | None = None
+
+    def action_stop(self) -> None:
+        if self._proc is not None and self._proc.returncode is None:
+            self.query_one("#status", Static).update("[yellow]Stopping…[/yellow]")
+            terminate_process(self._proc)
+        else:
+            self.notify("Nothing running to stop.", severity="warning")
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -73,6 +88,9 @@ class ScanMonitorScreen(Screen[None]):
     def _emit(self, line: str) -> None:
         self.query_one("#output", RichLog).write(line)
 
+    def _on_proc(self, proc: Process) -> None:
+        self._proc = proc
+
     @work(exclusive=True)
     async def _run(self) -> None:
         status = self.query_one("#status", Static)
@@ -82,7 +100,9 @@ class ScanMonitorScreen(Screen[None]):
         scans.update(self.scan)
 
         try:
-            result = await run_command(self.argv, scan_dir=self.scan_dir, on_line=self._emit)
+            result = await run_command(
+                self.argv, scan_dir=self.scan_dir, on_line=self._emit, on_start=self._on_proc
+            )
         except ExecutorError as exc:
             self.scan.status = ScanStatus.ERROR
             self.scan.finished_at = datetime.now()
@@ -93,6 +113,11 @@ class ScanMonitorScreen(Screen[None]):
         self.scan.exit_code = result.exit_code
         self.scan.raw_output_path = result.stdout_log_path
         self.scan.finished_at = datetime.now()
+        if result.stopped:
+            self.scan.status = ScanStatus.CANCELLED
+            scans.update(self.scan)
+            status.update("[yellow]Stopped[/yellow]")
+            return
         self.scan.status = ScanStatus.DONE if result.exit_code == 0 else ScanStatus.ERROR
         scans.update(self.scan)
 

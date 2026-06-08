@@ -12,6 +12,20 @@ def test_packaged_registry_has_nmap():
     assert registry.errors == []
 
 
+def test_packaged_tools_all_load():
+    registry = build_registry()
+    expected = {
+        "nmap", "gowitness", "nxc", "responder", "ntlmrelayx", "mitm6", "nessus",
+        "masscan", "nslookup",
+    }
+    assert expected <= set(registry.names())
+    assert registry.errors == []
+    # masscan reuses the nmap XML parser and always needs root.
+    masscan = registry.get("masscan")
+    assert masscan.requires_root is True
+    assert masscan.output.parser == "nmap_xml"
+
+
 def test_user_dir_overrides_and_bad_manifest_recorded(tmp_path):
     # A user manifest that overrides nmap's description.
     (tmp_path / "nmap.yaml").write_text(

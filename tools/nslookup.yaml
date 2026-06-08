@@ -1,0 +1,17 @@
+# nslookup — DNS resolver. Lightweight name/record lookups; useful early in a
+# chain to resolve names or enumerate records. Text output only (no parser).
+# Record type is the -type option (omit it for nslookup's default A lookup).
+name: nslookup
+binary: nslookup
+
+description: "DNS lookup utility"
+
+target:
+  mode: append            # the name (and optional server) to query
+
+output:
+  stream: stdout
+
+options:
+  - {flag: "-type=", label: "Record type", type: choice, attached: true,
+     choices: ["A", "AAAA", "MX", "NS", "TXT", "SOA", "CNAME", "PTR", "ANY"]}

@@ -37,10 +37,16 @@ class WorkflowMonitorScreen(Screen[None]):
     """
 
     BINDINGS = [
+        ("s", "stop", "Stop"),
         ("r", "results", "Results"),
         ("escape", "app.pop_screen", "Back"),
         ("q", "app.quit", "Quit"),
     ]
+
+    def action_stop(self) -> None:
+        self.workers.cancel_all()
+        self.query_one("#log", RichLog).write("— stopping workflow… —")
+        self.notify("Stopping workflow (current step is being terminated).")
 
     def __init__(
         self,

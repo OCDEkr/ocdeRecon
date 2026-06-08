@@ -10,8 +10,11 @@ UI-free and only prepends ``sudo`` when told to.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shlex
+import signal
+import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +26,8 @@ from pentui.core.validators import ValidationFailed, validate_value
 #: bool options -> True/False; value/choice options -> the string value.
 OptionValues = Mapping[str, str | bool]
 
+Process = asyncio.subprocess.Process
+
 
 class ExecutorError(Exception):
     """Raised when a command cannot be built or launched."""
@@ -33,6 +38,36 @@ class CompletedScan:
     argv: list[str]
     exit_code: int
     stdout_log_path: str | None
+
+    @property
+    def stopped(self) -> bool:
+        """True when the process was killed by a signal (e.g. operator stop)."""
+        return self.exit_code < 0
+
+
+def terminate_process(proc: Process) -> None:
+    """Stop a running process and its children (the whole process group).
+
+    Processes are launched in their own session, so signalling the group reaches
+    children too (e.g. the tool under ``sudo``). If the group runs as root and we
+    can't signal it directly, fall back to ``sudo -n kill`` (cached credentials).
+    """
+    if proc.returncode is not None:
+        return
+    try:
+        pgid = os.getpgid(proc.pid)
+    except ProcessLookupError:
+        return
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        with contextlib.suppress(Exception):
+            subprocess.run(
+                ["sudo", "-n", "kill", "-TERM", "--", f"-{pgid}"],  # noqa: S603,S607
+                check=False,
+            )
 
 
 def requires_root(
@@ -132,12 +167,16 @@ async def run_command(
     *,
     scan_dir: str | Path | None = None,
     on_line: Callable[[str], None] | None = None,
+    on_start: Callable[[Process], None] | None = None,
     env: Mapping[str, str] | None = None,
 ) -> CompletedScan:
     """Run ``argv``, streaming merged stdout+stderr line-by-line.
 
     Each line is passed to ``on_line`` (if given) and teed to
-    ``<scan_dir>/stdout.log`` (if ``scan_dir`` given). Returns on process exit.
+    ``<scan_dir>/stdout.log`` (if ``scan_dir`` given). ``on_start`` receives the
+    process so a caller can stop it (see ``terminate_process``). The process runs
+    in its own session so stopping it reaches child processes. Returns on exit;
+    if the awaiting task is cancelled, the process is terminated first.
     """
     argv = list(argv)
     log_path: Path | None = None
@@ -155,21 +194,31 @@ async def run_command(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env={**os.environ, **env} if env else None,
+                start_new_session=True,
             )
         except FileNotFoundError as exc:
             raise ExecutorError(f"command not found: {argv[0]!r}") from exc
 
+        if on_start is not None:
+            on_start(proc)
+
         assert proc.stdout is not None
-        while True:
-            raw = await proc.stdout.readline()
-            if not raw:
-                break
-            line = raw.decode(errors="replace").rstrip("\n")
-            if on_line is not None:
-                on_line(line)
-            if log_handle is not None:
-                log_handle.write(line + "\n")
-        exit_code = await proc.wait()
+        try:
+            while True:
+                raw = await proc.stdout.readline()
+                if not raw:
+                    break
+                line = raw.decode(errors="replace").rstrip("\n")
+                if on_line is not None:
+                    on_line(line)
+                if log_handle is not None:
+                    log_handle.write(line + "\n")
+            exit_code = await proc.wait()
+        except asyncio.CancelledError:
+            terminate_process(proc)
+            with contextlib.suppress(Exception):
+                await proc.wait()
+            raise
     finally:
         if log_handle is not None:
             log_handle.close()

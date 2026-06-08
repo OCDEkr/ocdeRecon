@@ -14,10 +14,13 @@ and browsed; a **workflow engine** that chains tools as a DAG (query handoff,
 approval gates, unattended mode); **report export** to Markdown/HTML/JSON/CSV; and
 polish (blue/white + colour-blind-safe themes, tool-availability hints, audit-log
 viewer). Workflows can be **built interactively in the TUI** (chain tools without
-writing YAML) and saved as YAML, in addition to the packaged templates. Shipped
-tool manifests: nmap, gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
-Deferred to future work (§14): parallel step execution, SQLCipher-encrypted
-engagements, PyInstaller packaging, scheduled runs.
+writing YAML) and saved as YAML, in addition to the packaged templates. Every
+screen that lists tools is driven by the registry, so adding a manifest makes the
+tool available in manual scans, the builder, and workflows with no code change.
+Running scans/steps can be stopped with `s` (the process group is terminated).
+Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
+ntlmrelayx, mitm6, nessus. Deferred to future work (§14): parallel step execution,
+SQLCipher-encrypted engagements, PyInstaller packaging, scheduled runs.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.

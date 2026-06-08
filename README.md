@@ -29,8 +29,10 @@ packaging, scheduled runs.
 Workflows can be authored two ways: hand-written YAML under `workflows/` (or
 `~/.config/pentui/workflows/`), or **built interactively** in the app — press
 `b` on the Workflows screen to chain tools (pick a tool, choose what each step
-feeds on, mark gates) and save a reusable workflow. Shipped tool manifests: nmap,
-gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
+feeds on, mark gates) and save a reusable workflow. Adding a manifest under
+`tools/` makes the tool show up everywhere automatically. A running scan or
+workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
+nslookup, gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
 
 ## Quick start (development)
 

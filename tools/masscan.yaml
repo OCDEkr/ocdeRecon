@@ -1,0 +1,29 @@
+# masscan — very fast Internet-scale TCP port scanner. Needs root (raw sockets).
+# Its -oX output is nmap-compatible XML, so the nmap_xml parser populates the
+# unified model — masscan makes a great fast discovery front-end before nmap.
+name: masscan
+binary: masscan
+description: "Fast asynchronous TCP port scanner"
+requires_root: true
+
+target:
+  mode: append
+
+output:
+  stream: stdout
+  artifact:
+    flag: "-oX"
+    path: "{scan_dir}/masscan.xml"
+  parser: nmap_xml          # masscan -oX emits nmap-compatible XML
+
+options:
+  - {flag: "-p", label: "Ports", type: value, placeholder: "e.g. 80,443 or 0-65535", validate: ports}
+  - {flag: "--rate", label: "Packets/sec", type: value, placeholder: "e.g. 1000"}
+  - {flag: "--banners", label: "Grab banners", type: bool}
+  - {flag: "-e", label: "Interface", type: value}
+  - {flag: "--router-ip", label: "Router IP", type: value}
+
+profiles:
+  - {name: "Common web", description: "Web ports at a modest rate", args: ["-p80,443,8080,8443", "--rate", "1000"]}
+  - {name: "Top TCP", description: "Common service ports", args: ["-p21,22,25,80,139,443,445,3389", "--rate", "1000"]}
+  - {name: "Full TCP", description: "All TCP ports (use a sane rate)", args: ["-p0-65535", "--rate", "1000"]}
