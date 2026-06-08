@@ -1,0 +1,26 @@
+# ntlmrelayx (Impacket) — relays captured NTLM authentication to target hosts.
+# Long-running (runs until stopped); needs root to bind SMB/HTTP. Relay targets
+# are written to a file and passed with -tf, so a workflow can feed it the set of
+# hosts to relay to (e.g. SMB hosts without signing).
+name: ntlmrelayx
+binary: ntlmrelayx.py
+description: "Impacket NTLM relay (runs until stopped)"
+requires_root: true
+
+target:
+  mode: flag
+  flag: "-tf"             # relay targets written to a file, passed as -tf <file>
+
+output:
+  stream: stdout
+
+options:
+  - {flag: "-smb2support", label: "SMB2 support", type: bool}
+  - {flag: "-i", label: "Interactive SMB shell", type: bool}
+  - {flag: "--no-http-server", label: "Disable HTTP server", type: bool}
+  - {flag: "--no-smb-server", label: "Disable SMB server", type: bool}
+  - {flag: "-c", label: "Command to execute on relay", type: value}
+  - {flag: "-wh", label: "WPAD host (serve rogue WPAD)", type: value}
+
+profiles:
+  - {name: "Relay", description: "Relay with SMB2 support", args: ["-smb2support"]}

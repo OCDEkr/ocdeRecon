@@ -1,0 +1,31 @@
+# NetExec (nxc) — successor to CrackMapExec. Protocol-oriented network execution
+# and credential validation. Usage: `nxc <protocol> <target> [options]`, so the
+# protocol comes from the profile (placed before the appended targets).
+# A natural downstream of nmap: feed hosts with 445/445-like ports as targets.
+name: nxc
+binary: nxc
+description: "NetExec — multi-protocol network enumeration / credential testing"
+version_check: ["nxc", "--version"]
+
+target:
+  mode: append
+
+output:
+  stream: stdout
+
+options:
+  - {flag: "-u", label: "Username (or user list)", type: value}
+  - {flag: "-p", label: "Password (or password list)", type: value}
+  - {flag: "-d", label: "Domain", type: value}
+  - {flag: "-H", label: "NTLM hash", type: value}
+  - {flag: "--local-auth", label: "Local auth", type: bool}
+  - {flag: "--shares", label: "Enumerate shares", type: bool}
+  - {flag: "--sessions", label: "Enumerate sessions", type: bool}
+  - {flag: "--users", label: "Enumerate users", type: bool}
+
+profiles:
+  - {name: "SMB", description: "SMB protocol", args: ["smb"]}
+  - {name: "LDAP", description: "LDAP protocol", args: ["ldap"]}
+  - {name: "WinRM", description: "WinRM protocol", args: ["winrm"]}
+  - {name: "MSSQL", description: "MSSQL protocol", args: ["mssql"]}
+  - {name: "SSH", description: "SSH protocol", args: ["ssh"]}

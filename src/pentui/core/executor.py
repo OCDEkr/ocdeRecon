@@ -41,7 +41,9 @@ def requires_root(
     profile: ToolProfile | None = None,
     options: OptionValues | None = None,
 ) -> bool:
-    """Union of the profile's and any selected option's ``requires_root`` flags."""
+    """Union of the manifest's, profile's, and any selected option's root flags."""
+    if manifest.requires_root:
+        return True
     if profile is not None and profile.requires_root:
         return True
     options = options or {}

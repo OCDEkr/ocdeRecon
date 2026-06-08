@@ -26,6 +26,12 @@ themes (F2), tool-availability hints, and an audit-log viewer. Deferred to futur
 work (`PROJECT.md` §14): parallel step execution, SQLCipher encryption, PyInstaller
 packaging, scheduled runs.
 
+Workflows can be authored two ways: hand-written YAML under `workflows/` (or
+`~/.config/pentui/workflows/`), or **built interactively** in the app — press
+`b` on the Workflows screen to chain tools (pick a tool, choose what each step
+feeds on, mark gates) and save a reusable workflow. Shipped tool manifests: nmap,
+gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
+
 ## Quick start (development)
 
 ```bash

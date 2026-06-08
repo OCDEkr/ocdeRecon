@@ -1,8 +1,8 @@
 """Workflow launch screen (PROJECT.md §7, §11).
 
-Pick a workflow, choose attended vs. unattended, and launch it. If any step
-needs root we authenticate sudo once up front (suspending the app) so the engine
-can elevate per-step without re-prompting.
+Pick a workflow, choose attended vs. unattended, and launch it — or press 'b' to
+build a new one. If any step needs root we authenticate sudo once up front
+(suspending the app) so the engine can elevate per-step without re-prompting.
 """
 
 from __future__ import annotations
@@ -19,22 +19,26 @@ from textual.widgets import Button, Checkbox, Footer, Header, Label, ListItem, L
 from pentui.config import AppConfig
 from pentui.core.executor import requires_root
 from pentui.core.registry import ToolRegistry, tool_available
-from pentui.core.workflow import WorkflowDefinition, build_workflow_registry
+from pentui.core.workflow import WorkflowDefinition, WorkflowRegistry, build_workflow_registry
 from pentui.persistence.engagement import Engagement
 
 
 class WorkflowLaunchScreen(Screen[None]):
-    """Choose and launch a workflow for the engagement."""
+    """Choose and launch a workflow for the engagement, or build a new one."""
 
     DEFAULT_CSS = """
     WorkflowLaunchScreen { layout: vertical; }
-    #workflows { height: 1fr; border: round $panel; margin: 0 1; }
+    #workflows { height: 1fr; min-height: 5; border: round $panel; margin: 0 1; }
     #detail { height: auto; border: round $panel; margin: 0 1; padding: 0 1; }
     #controls { height: auto; padding: 0 1; }
     Button { margin: 1 1 0 0; }
     """
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "app.quit", "Quit")]
+    BINDINGS = [
+        ("b", "build", "Build new"),
+        ("escape", "app.pop_screen", "Back"),
+        ("q", "app.quit", "Quit"),
+    ]
 
     def __init__(
         self, engagement: Engagement, registry: ToolRegistry, config: AppConfig
@@ -43,17 +47,12 @@ class WorkflowLaunchScreen(Screen[None]):
         self.engagement = engagement
         self.registry = registry
         self.config = config
-        self.workflows = build_workflow_registry(config.user_workflows_dir)
+        self.workflows: WorkflowRegistry = build_workflow_registry(config.user_workflows_dir)
 
     def compose(self) -> ComposeResult:
         yield Header()
-        for error in self.workflows.errors:
-            self.notify(error, severity="error", title="Workflow error", timeout=10)
-        yield Label("Workflows:")
-        yield ListView(
-            *[ListItem(Label(name), name=name) for name in self.workflows.names()],
-            id="workflows",
-        )
+        yield Label("Workflows (Enter to select, b to build a new one):")
+        yield ListView(id="workflows")
         yield Static("Select a workflow.", id="detail")
         with Horizontal(id="controls"):
             yield Checkbox("Unattended (skip approval gates)", id="unattended")
@@ -61,15 +60,27 @@ class WorkflowLaunchScreen(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self._refresh()
+
+    def on_screen_resume(self) -> None:
+        # Pick up workflows created in the builder this session.
+        self._refresh()
+
+    def _refresh(self) -> None:
+        self.workflows = build_workflow_registry(self.config.user_workflows_dir)
+        for error in self.workflows.errors:
+            self.notify(error, severity="error", title="Workflow error", timeout=10)
+        view = self.query_one("#workflows", ListView)
+        view.clear()
+        for name in self.workflows.names():
+            view.append(ListItem(Label(name), name=name))
         if not self.workflows.names():
             self.query_one("#detail", Static).update(
-                "No workflows found. Add one under workflows/ or "
-                "~/.config/pentui/workflows/."
+                "No workflows yet — press [b]b[/b] to build one."
             )
 
     def _selected(self) -> WorkflowDefinition | None:
-        view = self.query_one("#workflows", ListView)
-        item = view.highlighted_child
+        item = self.query_one("#workflows", ListView).highlighted_child
         if item is None or item.name is None:
             return None
         return self.workflows.get(item.name)
@@ -94,6 +105,13 @@ class WorkflowLaunchScreen(Screen[None]):
                 f"• {step.id}: {step.tool} ({step.profile or 'manual'}){after}{gate}{missing}"
             )
         self.query_one("#detail", Static).update("\n".join(lines))
+
+    def action_build(self) -> None:
+        from pentui.tui.screens.workflow_builder import WorkflowBuilderScreen
+
+        self.app.push_screen(
+            WorkflowBuilderScreen(self.engagement, self.registry, self.config)
+        )
 
     @on(Button.Pressed, "#launch")
     def _launch(self) -> None:

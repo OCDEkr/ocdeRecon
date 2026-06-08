@@ -91,6 +91,9 @@ class ToolManifest(BaseModel):
     binary: str
     description: str | None = None
     version_check: list[str] = Field(default_factory=list)
+    #: True when the tool always needs root (raw sockets, privileged binds, …),
+    #: regardless of which options/profile are selected.
+    requires_root: bool = False
     target: TargetSpec = Field(default_factory=TargetSpec)
     output: OutputSpec = Field(default_factory=OutputSpec)
     options: list[ToolOption] = Field(default_factory=list)

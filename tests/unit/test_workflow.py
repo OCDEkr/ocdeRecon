@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from pentui.core.query import Materializer
 from pentui.core.workflow import (
     PACKAGED_WORKFLOWS_DIR,
     WorkflowDefinition,
     WorkflowError,
     build_workflow_registry,
     load_workflow,
+    save_workflow,
     topological_order,
 )
 
@@ -66,3 +68,28 @@ def test_workflow_registry_has_web_recon():
     registry = build_workflow_registry()
     assert "web-recon" in registry.names()
     assert registry.errors == []
+
+
+def test_save_workflow_round_trips(tmp_path):
+    wf = WorkflowDefinition.model_validate(
+        {
+            "name": "rt",
+            "description": "round trip",
+            "steps": [
+                {"id": "discover", "tool": "nmap", "profile": "Quick",
+                 "targets": {"from": "project"}},
+                {"id": "shots", "tool": "gowitness", "after": ["discover"], "gate": True,
+                 "input": {"from": "hosts", "where": {"port_open_in": [80, 443]},
+                           "as": "target_urls"}},
+            ],
+        }
+    )
+    loaded = load_workflow(save_workflow(wf, tmp_path / "rt.yaml"))
+    assert loaded.name == "rt"
+    assert [s.id for s in loaded.steps] == ["discover", "shots"]
+    assert loaded.steps[0].targets.from_ == "project"
+    shots = loaded.steps[1]
+    assert shots.after == ["discover"]
+    assert shots.gate is True
+    assert shots.input.as_ is Materializer.TARGET_URLS
+    assert shots.input.where.port_open_in == [80, 443]

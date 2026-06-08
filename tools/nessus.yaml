@@ -1,0 +1,23 @@
+# Nessus (nessuscli) — management CLI for the Nessus scanner.
+# NOTE: Nessus runs scans via its web UI / REST API, not the CLI, so this manifest
+# wraps `nessuscli` for management tasks (status, updates) rather than launching
+# scans. It does not produce a parseable artifact. Kept for completeness; drive
+# actual scans through the Nessus API/UI.
+name: nessus
+binary: nessuscli
+description: "Nessus management CLI (nessuscli — not a scan launcher)"
+requires_root: true
+
+target:
+  mode: append            # management commands take no targets
+
+output:
+  stream: stdout
+
+options:
+  - {flag: "--verbose", label: "Verbose", type: bool}
+
+profiles:
+  - {name: "Software status", description: "Show installed Nessus components", args: ["software"]}
+  - {name: "Fix --list", description: "List advanced settings", args: ["fix", "--list"]}
+  - {name: "Update", description: "Update plugins", args: ["update"]}
