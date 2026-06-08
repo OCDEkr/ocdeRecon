@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from textual.widgets import Button, Input, Select
+from textual.widgets import Button, Input, Select, Static
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
@@ -17,6 +17,21 @@ def _config(tmp_path: Path) -> AppConfig:
     config = AppConfig(data_dir=tmp_path / "data", config_dir=tmp_path / "config")
     config.ensure_dirs()
     return config
+
+
+async def test_value_option_default_is_prefilled(tmp_path):
+    config = _config(tmp_path)
+    app = PentuiApp(config=config)
+    async with app.run_test(size=(120, 50)) as pilot:
+        await start_engagement(pilot, name="dflt", includes="10.0.0.0/24")
+        screen = app.screen
+        screen.query_one("#tool", Select).value = "gowitness"
+        await pilot.pause()
+        # gowitness --threads/--timeout defaults pre-fill, so they're in the command.
+        opts = screen._current_options()
+        assert opts.get("--threads") == "16"
+        assert opts.get("--timeout") == "15"
+        assert "--threads 16" in str(screen.query_one("#cmd", Static).render())
 
 
 async def test_save_as_profile_writes_user_manifest(tmp_path):

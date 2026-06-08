@@ -146,7 +146,9 @@ class ToolConfigScreen(Screen[None]):
             if option.default:
                 return Select(choices, value=option.default, allow_blank=True)
             return Select(choices, allow_blank=True)
-        return Input(placeholder=option.placeholder or "")
+        # value option — pre-fill its default (e.g. --threads 16) so it's applied
+        # unless the operator clears it.
+        return Input(value=option.default or "", placeholder=option.placeholder or "")
 
     # -- live preview ------------------------------------------------------ #
     def _current_profile(self) -> ToolProfile | None:

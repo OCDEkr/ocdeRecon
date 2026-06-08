@@ -81,6 +81,22 @@ def test_build_argv_rejects_bad_choice(nmap, tmp_path):
         build_argv(nmap, options={"-T": "9"}, targets=["x"], scan_dir=tmp_path)
 
 
+def test_gowitness_v3_nmap_command():
+    g = load_manifest(PACKAGED_TOOLS_DIR / "gowitness.yaml")
+    argv = build_argv(
+        g,
+        profile=g.profile("Scan from nmap XML"),
+        options={
+            "-f": "nmap.xml", "--write-screenshots": True, "--log-scan-errors": True,
+            "--open-only": True, "--write-db": True, "--threads": "16", "--timeout": "15",
+        },
+    )
+    assert argv[:3] == ["gowitness", "scan", "nmap"]
+    assert argv[argv.index("-f") + 1] == "nmap.xml"
+    assert {"--write-screenshots", "--log-scan-errors", "--open-only", "--write-db"} <= set(argv)
+    assert argv[argv.index("--threads") + 1] == "16"
+
+
 def test_requires_root(nmap):
     assert requires_root(nmap, profile=nmap.profile("Full TCP")) is True
     assert requires_root(nmap, profile=nmap.profile("Quick")) is False
