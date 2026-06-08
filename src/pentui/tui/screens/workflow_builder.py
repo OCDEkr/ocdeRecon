@@ -116,8 +116,24 @@ class WorkflowBuilderScreen(Screen[None]):
             Select([], allow_blank=True, id="step-after"),
             Label("Feed:"),
             Select(_feed_options(), value="project", allow_blank=False, id="step-feed"),
-            Checkbox("Per /24", id="step-foreach"),
-            Checkbox("Gate", id="step-gate"),
+            Checkbox(
+                "Per /24",
+                id="step-foreach",
+                tooltip=(
+                    "Fan out: run this step once per /24 subnet of the hosts its feed "
+                    "selects, instead of one run for all of them (e.g. one nmap per "
+                    "/24). Requires a query feed (Web/SMB/Live)."
+                ),
+            ),
+            Checkbox(
+                "Gate",
+                id="step-gate",
+                tooltip=(
+                    "Pause for approval before this step runs (attended runs show an "
+                    "Approve/Skip prompt; skipping also skips downstream steps). "
+                    "Unattended runs auto-approve gates and log it."
+                ),
+            ),
             Button("Add step", id="add-step"),
             id="addrow2",
         )
