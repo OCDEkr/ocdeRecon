@@ -102,8 +102,9 @@ def test_build_argv_extra_args(nmap, tmp_path):
 
 def test_build_argv_sudo_prefix(nmap, tmp_path):
     argv = build_argv(nmap, options={"-sS": True}, targets=["x"], scan_dir=tmp_path, sudo=True)
-    assert argv[0] == "sudo"
-    assert argv[1] == "nmap"
+    # sudo -S reads the password from stdin (no TTY needed)
+    assert argv[:4] == ["sudo", "-S", "-p", ""]
+    assert argv[4] == "nmap"
 
 
 def test_build_argv_rejects_bad_port(nmap, tmp_path):
@@ -154,6 +155,17 @@ async def test_run_command_streams_and_logs(tmp_path):
     assert result.exit_code == 0
     assert lines == ["hello", "world"]
     assert (tmp_path / "stdout.log").read_text() == "hello\nworld\n"
+
+
+async def test_run_command_feeds_stdin_data():
+    lines: list[str] = []
+    result = await run_command(
+        [sys.executable, "-c", "import sys; print('got:', sys.stdin.readline().strip())"],
+        on_line=lines.append,
+        stdin_data="s3cret",
+    )
+    assert result.exit_code == 0
+    assert lines == ["got: s3cret"]
 
 
 async def test_run_command_missing_binary():

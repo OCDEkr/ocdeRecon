@@ -86,4 +86,7 @@ pentui
 Per-user data lives under `~/.local/share/pentui/` (engagements: SQLite DBs,
 scan artifacts, reports) and `~/.config/pentui/` (settings, and your own
 `tools/`/`workflows/` overrides). Don't copy `.venv/` or `*.db` between machines.
-Root-requiring tools elevate per-command via `sudo`.
+Root-requiring tools (masscan, responder, `-sS`, …) prompt once per session for
+your sudo password and elevate per-command via `sudo -S` (password fed on stdin,
+never written to disk). Alternatively run the whole app as root
+(`sudo -E env "PATH=$PATH" "$(which pentui)"`) to skip the prompt.

@@ -8,7 +8,6 @@ build a new one. If any step needs root we authenticate sudo once up front
 from __future__ import annotations
 
 import os
-import subprocess
 
 from textual import on
 from textual.app import ComposeResult
@@ -17,7 +16,6 @@ from textual.screen import Screen
 from textual.widgets import Button, Checkbox, Footer, Header, Label, ListItem, ListView, Static
 
 from pentui.config import AppConfig
-from pentui.core.executor import requires_root
 from pentui.core.registry import ToolRegistry, tool_available
 from pentui.core.workflow import WorkflowDefinition, WorkflowRegistry, build_workflow_registry
 from pentui.persistence.engagement import Engagement
@@ -119,34 +117,14 @@ class WorkflowLaunchScreen(Screen[None]):
         if wf is None:
             self.notify("Select a workflow first.", severity="warning")
             return
-        unattended = self.query_one("#unattended", Checkbox).value
-        is_root = os.geteuid() == 0
-        if self._needs_root(wf) and not is_root and not self._elevate():
-            return
+        # The monitor captures the sudo password (if any step needs root) in its
+        # worker before running the engine.
         from pentui.tui.screens.workflow_monitor import WorkflowMonitorScreen
 
         self.app.push_screen(
             WorkflowMonitorScreen(
                 self.engagement, self.registry, self.config, wf,
-                unattended=unattended, is_root=is_root,
+                unattended=self.query_one("#unattended", Checkbox).value,
+                is_root=os.geteuid() == 0,
             )
         )
-
-    def _needs_root(self, wf: WorkflowDefinition) -> bool:
-        for step in wf.steps:
-            manifest = self.registry.get(step.tool)
-            if manifest is None:
-                continue
-            profile = manifest.profile(step.profile) if step.profile else None
-            if requires_root(manifest, profile=profile, options=step.options):
-                return True
-        return False
-
-    def _elevate(self) -> bool:
-        self.notify("This workflow has root steps — authenticating with sudo…")
-        with self.app.suspend():
-            result = subprocess.run(["sudo", "-v"], check=False)  # noqa: S603,S607
-        if result.returncode != 0:
-            self.notify("sudo authentication failed; launch cancelled.", severity="error")
-            return False
-        return True

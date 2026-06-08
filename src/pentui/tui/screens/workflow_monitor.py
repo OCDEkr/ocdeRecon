@@ -7,6 +7,7 @@ output in a log. Approval gates surface here as a modal (attended runs only).
 from __future__ import annotations
 
 import contextlib
+from typing import TYPE_CHECKING, cast
 
 from textual import work
 from textual.app import ComposeResult
@@ -20,10 +21,14 @@ from pentui.core.workflow import (
     WorkflowEngine,
     WorkflowEvent,
     WorkflowStep,
+    workflow_needs_root,
 )
 from pentui.persistence.engagement import Engagement
 from pentui.persistence.repositories import ScopeRuleRepository
 from pentui.tui.screens.modals import GateApproveModal
+
+if TYPE_CHECKING:
+    from pentui.app import PentuiApp
 
 
 class WorkflowMonitorScreen(Screen[None]):
@@ -104,6 +109,14 @@ class WorkflowMonitorScreen(Screen[None]):
 
     @work(exclusive=True)
     async def _run(self) -> None:
+        log = self.query_one("#log", RichLog)
+        sudo_password = None
+        if not self.is_root and workflow_needs_root(self.workflow, self.registry):
+            sudo_password = await cast("PentuiApp", self.app).request_sudo_password()
+            if sudo_password is None:
+                log.write("— root password required; workflow cancelled. —")
+                return
+
         rules = ScopeRuleRepository(self.engagement.conn).list_for_project(
             self.engagement.project_id
         )
@@ -114,8 +127,9 @@ class WorkflowMonitorScreen(Screen[None]):
             scope_rules=rules,
             unattended=self.unattended,
             is_root=self.is_root,
+            sudo_password=sudo_password,
             event_sink=self._on_event,
             gate_approver=self._approve,
         )
         await engine.run(self.workflow)
-        self.query_one("#log", RichLog).write("— workflow finished. Press r for results. —")
+        log.write("— workflow finished. Press r for results. —")

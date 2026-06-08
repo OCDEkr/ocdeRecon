@@ -57,6 +57,8 @@ class ScanMonitorScreen(Screen[None]):
         scan: Scan,
         scan_dir: str,
         runs: list[tuple[str, list[str]]],
+        *,
+        sudo_password: str | None = None,
     ) -> None:
         super().__init__()
         self.engagement = engagement
@@ -64,6 +66,7 @@ class ScanMonitorScreen(Screen[None]):
         self.scan = scan
         self.scan_dir = scan_dir
         self.runs = runs
+        self.sudo_password = sudo_password
         self._proc: Process | None = None
         self._stopped = False
         self._log: TextIO | None = None
@@ -120,7 +123,10 @@ class ScanMonitorScreen(Screen[None]):
                 if label:
                     self._emit(f"=== [{index + 1}/{len(self.runs)}] {label} ===")
                 try:
-                    result = await run_command(argv, on_line=self._emit, on_start=self._on_proc)
+                    result = await run_command(
+                        argv, on_line=self._emit, on_start=self._on_proc,
+                        stdin_data=self.sudo_password,
+                    )
                 except ExecutorError as exc:
                     self._emit(f"✗ {exc}")
                     exit_codes.append(127)

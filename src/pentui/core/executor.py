@@ -132,7 +132,9 @@ def build_argv(
     Order: ``[sudo] binary <profile args> <option tokens> <extra_args>
     <artifact flags> <targets>``. ``extra_args`` are operator-authored raw tokens.
     """
-    argv: list[str] = ["sudo"] if sudo else []
+    # ``sudo -S`` reads the password from stdin (fed by run_command), which works
+    # even when the process has no controlling terminal (workflow/detached runs).
+    argv: list[str] = ["sudo", "-S", "-p", ""] if sudo else []
     argv.append(manifest.binary)
 
     if profile is not None:
@@ -244,15 +246,18 @@ async def run_command(
     scan_dir: str | Path | None = None,
     on_line: Callable[[str], None] | None = None,
     on_start: Callable[[Process], None] | None = None,
+    stdin_data: str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> CompletedScan:
     """Run ``argv``, streaming merged stdout+stderr line-by-line.
 
     Each line is passed to ``on_line`` (if given) and teed to
     ``<scan_dir>/stdout.log`` (if ``scan_dir`` given). ``on_start`` receives the
-    process so a caller can stop it (see ``terminate_process``). The process runs
-    in its own session so stopping it reaches child processes. Returns on exit;
-    if the awaiting task is cancelled, the process is terminated first.
+    process so a caller can stop it (see ``terminate_process``). ``stdin_data`` is
+    written to the process's stdin then closed (used to feed ``sudo -S`` the
+    password). The process runs in its own session so stopping it reaches child
+    processes. Returns on exit; if the awaiting task is cancelled, the process is
+    terminated first.
     """
     argv = list(argv)
     log_path: Path | None = None
@@ -267,6 +272,7 @@ async def run_command(
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
+                stdin=asyncio.subprocess.PIPE if stdin_data is not None else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env={**os.environ, **env} if env else None,
@@ -277,6 +283,11 @@ async def run_command(
 
         if on_start is not None:
             on_start(proc)
+
+        if stdin_data is not None and proc.stdin is not None:
+            proc.stdin.write((stdin_data + "\n").encode())
+            await proc.stdin.drain()
+            proc.stdin.close()
 
         assert proc.stdout is not None
         try:

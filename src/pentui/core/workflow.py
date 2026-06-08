@@ -268,6 +268,18 @@ def build_workflow_registry(*directories: str | Path) -> WorkflowRegistry:
     return registry
 
 
+def workflow_needs_root(wf: WorkflowDefinition, registry: ToolRegistry) -> bool:
+    """Whether any step's command would require root (so we must capture sudo)."""
+    for step in wf.steps:
+        manifest = registry.get(step.tool)
+        if manifest is None:
+            continue
+        profile = manifest.profile(step.profile) if step.profile else None
+        if requires_root(manifest, profile=profile, options=step.options):
+            return True
+    return False
+
+
 # --------------------------------------------------------------------------- #
 # Engine
 # --------------------------------------------------------------------------- #
@@ -302,6 +314,7 @@ class WorkflowEngine:
         scope_rules: list[ScopeRule] | None = None,
         unattended: bool = False,
         is_root: bool = False,
+        sudo_password: str | None = None,
         event_sink: EventSink | None = None,
         gate_approver: GateApprover | None = None,
     ) -> None:
@@ -313,6 +326,7 @@ class WorkflowEngine:
         self.scope_rules = scope_rules or []
         self.unattended = unattended
         self.is_root = is_root
+        self.sudo_password = sudo_password
         self.event_sink = event_sink
         self.gate_approver = gate_approver
         self.states: dict[str, StepState] = {}
@@ -506,7 +520,10 @@ class WorkflowEngine:
                     self._emit(step.id, "line", f"{prefix}=== {sublabel} ===")
                 self._emit(step.id, "line", f"{prefix}$ {preview(argv)}")
                 try:
-                    result = await run_command(argv, on_line=on_line)
+                    result = await run_command(
+                        argv, on_line=on_line,
+                        stdin_data=self.sudo_password if use_sudo else None,
+                    )
                 except ExecutorError as exc:
                     self._emit(step.id, "line", f"{prefix}✗ {exc}")
                     exit_codes.append(127)

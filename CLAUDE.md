@@ -99,8 +99,11 @@ TUI (Textual)  →  Core (engine)  →  Persistence (SQLite) + Reporting
   for manual runs (logged override), skipped-and-logged for workflow steps, even
   when a run is unattended (§10, §14).
 - **Privileges are per-command.** The app runs unprivileged; only commands whose
-  manifest options/profiles set `requires_root` get elevated via `sudo`, and that
-  elevation is recorded in `audit_log`.
+  manifest (or its options/profiles) set `requires_root` get elevated via
+  `sudo -S`, fed the operator's password on stdin (captured once per session via
+  `App.request_sudo_password`) so it works without a TTY in detached/workflow
+  runs. Elevation is recorded in `audit_log`. Running the whole app as root skips
+  per-command sudo entirely.
 - **Schema changes are additive migrations.** Append to `MIGRATIONS` in
   `persistence/db.py`; never edit a shipped migration. Keep `core/models.py` in
   sync with the schema.

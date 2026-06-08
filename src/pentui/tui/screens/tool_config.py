@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import subprocess
+from typing import TYPE_CHECKING, cast
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -56,6 +56,9 @@ from pentui.persistence.repositories import (
     TargetRepository,
 )
 from pentui.tui.screens.modals import ScopeBlockModal, TextPromptModal
+
+if TYPE_CHECKING:
+    from pentui.app import PentuiApp
 
 _SPLIT = re.compile(r"[\s,]+")
 
@@ -254,8 +257,12 @@ class ToolConfigScreen(Screen[None]):
         profile = self._current_profile()
         need_root = requires_root(self.manifest, profile=profile, options=options)
         use_sudo = need_root and os.geteuid() != 0
-        if use_sudo and not self._elevate():
-            return
+        sudo_password = None
+        if use_sudo:
+            sudo_password = await cast("PentuiApp", self.app).request_sudo_password()
+            if sudo_password is None:
+                self.notify("Root password required — scan cancelled.", severity="warning")
+                return
 
         # Create the scan row first so the artifact/log dir keys off its id.
         scans = ScanRepository(self.engagement.conn)
@@ -285,7 +292,10 @@ class ToolConfigScreen(Screen[None]):
         from pentui.tui.screens.scan_monitor import ScanMonitorScreen
 
         self.app.push_screen(
-            ScanMonitorScreen(self.engagement, self.manifest, scan, scan_dir, runs)
+            ScanMonitorScreen(
+                self.engagement, self.manifest, scan, scan_dir, runs,
+                sudo_password=sudo_password,
+            )
         )
 
     @on(Button.Pressed, "#load_targets")
@@ -368,12 +378,3 @@ class ToolConfigScreen(Screen[None]):
             self.engagement.project_id, action, detail
         )
 
-    def _elevate(self) -> bool:
-        """Cache sudo credentials by suspending the app and running ``sudo -v``."""
-        self.notify("This scan needs root — authenticating with sudo…")
-        with self.app.suspend():
-            result = subprocess.run(["sudo", "-v"], check=False)  # noqa: S603,S607
-        if result.returncode != 0:
-            self.notify("sudo authentication failed; scan cancelled.", severity="error")
-            return False
-        return True

@@ -25,15 +25,16 @@ class TextPromptModal(ModalScreen[str | None]):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, title: str, placeholder: str = "") -> None:
+    def __init__(self, title: str, placeholder: str = "", *, password: bool = False) -> None:
         super().__init__()
         self._title = title
         self._placeholder = placeholder
+        self._password = password
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Label(self._title, id="title")
-            yield Input(placeholder=self._placeholder, id="value")
+            yield Input(placeholder=self._placeholder, password=self._password, id="value")
             with Horizontal():
                 yield Button("Save", variant="primary", id="ok")
                 yield Button("Cancel", id="cancel")
