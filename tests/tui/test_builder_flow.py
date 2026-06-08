@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from textual.widgets import Button, Checkbox, Input, ListView, Select
+from textual.widgets import Button, Checkbox, Input, ListView, Select, Static
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
@@ -32,10 +32,14 @@ async def test_build_save_and_list_workflow(tmp_path):
         screen = app.screen
         screen.query_one("#wf-name", Input).value = "mychain"
 
-        # Step 1: nmap on the project targets.
+        # Step 1: nmap on the project targets, with operator-supplied extra args.
         screen.query_one("#step-tool", Select).value = "nmap"
         screen.query_one("#step-feed", Select).value = "project"
+        screen.query_one("#step-args", Input).value = "--top-ports 50"
         await pilot.pause()
+        # The live preview reflects the tool + extra args + a target placeholder.
+        cmd = str(screen.query_one("#step-cmd", Static).render())
+        assert "nmap" in cmd and "--top-ports 50" in cmd and "<targets>" in cmd
         screen.query_one("#add-step", Button).press()
         await pilot.pause()
 
@@ -57,6 +61,7 @@ async def test_build_save_and_list_workflow(tmp_path):
         assert path.exists()
         wf = load_workflow(path)
         assert [s.id for s in wf.steps] == ["nmap", "gowitness"]
+        assert wf.steps[0].extra_args == ["--top-ports", "50"]
         assert wf.steps[1].after == ["nmap"]
         assert wf.steps[1].input.as_.value == "target_urls"
         assert wf.steps[1].gate is True

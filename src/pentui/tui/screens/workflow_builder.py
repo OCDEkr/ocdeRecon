@@ -11,18 +11,29 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.screen import Screen
-from textual.widgets import Button, Checkbox, DataTable, Footer, Header, Input, Label, Select
+from textual.widgets import (
+    Button,
+    Checkbox,
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    Label,
+    Select,
+    Static,
+)
 
 from pentui.config import AppConfig
-from pentui.core.executor import requires_root
+from pentui.core.executor import ExecutorError, build_argv, preview, requires_root
 from pentui.core.query import Materializer, QuerySpec, WhereSpec
-from pentui.core.registry import ToolRegistry
+from pentui.core.registry import ToolRegistry, tool_available
 from pentui.core.workflow import (
     StepTargets,
     WorkflowDefinition,
@@ -54,8 +65,9 @@ class WorkflowBuilderScreen(Screen[None]):
 
     DEFAULT_CSS = """
     WorkflowBuilderScreen { layout: vertical; }
-    #meta, #addrow, #addrow2, #controls { height: auto; padding: 0 1; }
-    #steps { height: 1fr; min-height: 6; border: round $panel; margin: 0 1; }
+    #meta, #addrow, #addrow2, #addrow3, #controls { height: auto; padding: 0 1; }
+    #step-cmd { color: $text-muted; padding: 0 1; }
+    #steps { height: 1fr; min-height: 5; border: round $panel; margin: 0 1; }
     Label { padding: 1 1 0 0; }
     Button { margin: 1 1 0 0; }
     Select, Input { width: 1fr; }
@@ -92,6 +104,12 @@ class WorkflowBuilderScreen(Screen[None]):
             id="addrow",
         )
         yield Horizontal(
+            Label("Extra args:"),
+            Input(placeholder="any flags, e.g. -sV --top-ports 100", id="step-args"),
+            id="addrow3",
+        )
+        yield Static("", id="step-cmd")
+        yield Horizontal(
             Label("After:"),
             Select([], allow_blank=True, id="step-after"),
             Label("Feed:"),
@@ -111,7 +129,8 @@ class WorkflowBuilderScreen(Screen[None]):
 
     def on_mount(self) -> None:
         table = self.query_one("#steps", DataTable)
-        table.add_columns("Step", "Tool", "Profile", "After", "Feed", "Gate")
+        table.add_columns("Step", "Tool", "Profile", "Args", "After", "Feed", "Gate")
+        self._update_preview()
 
     # -- helpers ----------------------------------------------------------- #
     def _profile_options(self, tool: str | None) -> list[tuple[str, str]]:
@@ -122,6 +141,41 @@ class WorkflowBuilderScreen(Screen[None]):
     def _on_tool_changed(self, event: Select.Changed) -> None:
         tool = event.value if isinstance(event.value, str) else None
         self.query_one("#step-profile", Select).set_options(self._profile_options(tool))
+        self._update_preview()
+
+    @on(Select.Changed, "#step-profile")
+    @on(Input.Changed, "#step-args")
+    def _on_command_changed(self) -> None:
+        self._update_preview()
+
+    def _parsed_extra_args(self) -> list[str] | None:
+        """shlex-split the extra-args field; None if quotes are unbalanced."""
+        try:
+            return shlex.split(self.query_one("#step-args", Input).value)
+        except ValueError:
+            return None
+
+    def _update_preview(self) -> None:
+        cmd = self.query_one("#step-cmd", Static)
+        tool = self.query_one("#step-tool", Select).value
+        manifest = self.registry.get(tool) if isinstance(tool, str) else None
+        if manifest is None:
+            cmd.update("")
+            return
+        extra = self._parsed_extra_args()
+        if extra is None:
+            cmd.update("[red]⚠ unbalanced quotes in extra args[/red]")
+            return
+        profile_val = self.query_one("#step-profile", Select).value
+        profile = manifest.profile(profile_val) if isinstance(profile_val, str) else None
+        try:
+            # targets are supplied at run time from the feed; show a placeholder.
+            argv = build_argv(manifest, profile=profile, extra_args=extra, scan_dir="{scan_dir}")
+        except ExecutorError as exc:
+            cmd.update(f"[red]⚠ {exc}[/red]")
+            return
+        note = "" if tool_available(manifest) else "  [yellow](binary not found)[/yellow]"
+        cmd.update(f"$ {preview(argv)} <targets>{note}")
 
     def _unique_id(self, tool: str) -> str:
         existing = {s.id for s in self.steps}
@@ -147,11 +201,16 @@ class WorkflowBuilderScreen(Screen[None]):
         if needs_upstream and not after:
             self.notify("That feed reads a prior step — set 'After' first.", severity="warning")
             return
+        extra = self._parsed_extra_args()
+        if extra is None:
+            self.notify("Extra args have unbalanced quotes.", severity="error")
+            return
 
         step = WorkflowStep(
             id=self._unique_id(tool),
             tool=tool,
             profile=profile,
+            extra_args=extra,
             after=after,
             gate=self.query_one("#step-gate", Checkbox).value,
             **self._feed_kwargs(str(feed)),
@@ -188,7 +247,7 @@ class WorkflowBuilderScreen(Screen[None]):
         table.clear()
         for s in self.steps:
             table.add_row(
-                s.id, s.tool, s.profile or "-",
+                s.id, s.tool, s.profile or "-", " ".join(s.extra_args) or "-",
                 ", ".join(s.after) or "-", self._feed_label(s), "yes" if s.gate else "no",
             )
 

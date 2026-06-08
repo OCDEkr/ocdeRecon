@@ -74,6 +74,8 @@ class WorkflowStep(BaseModel):
     tool: str
     profile: str | None = None
     options: dict[str, str | bool] = Field(default_factory=dict)
+    #: Extra raw argv tokens appended after profile/options (operator-authored).
+    extra_args: list[str] = Field(default_factory=list)
     after: list[str] = Field(default_factory=list)
     targets: StepTargets | None = None
     input: QuerySpec | None = None
@@ -155,6 +157,8 @@ def save_workflow(wf: WorkflowDefinition, path: str | Path) -> Path:
             entry["profile"] = step.profile
         if step.options:
             entry["options"] = dict(step.options)
+        if step.extra_args:
+            entry["extra_args"] = list(step.extra_args)
         if step.after:
             entry["after"] = list(step.after)
         if step.targets is not None:
@@ -384,7 +388,7 @@ class WorkflowEngine:
         try:
             argv = build_argv(
                 manifest, profile=profile, options=step.options,
-                targets=targets, scan_dir=scan_dir, sudo=use_sudo,
+                extra_args=step.extra_args, targets=targets, scan_dir=scan_dir, sudo=use_sudo,
             )
         except ExecutorError as exc:
             scan.status = ScanStatus.ERROR

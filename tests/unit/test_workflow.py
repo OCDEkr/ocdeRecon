@@ -77,7 +77,7 @@ def test_save_workflow_round_trips(tmp_path):
             "description": "round trip",
             "steps": [
                 {"id": "discover", "tool": "nmap", "profile": "Quick",
-                 "targets": {"from": "project"}},
+                 "extra_args": ["--top-ports", "100"], "targets": {"from": "project"}},
                 {"id": "shots", "tool": "gowitness", "after": ["discover"], "gate": True,
                  "input": {"from": "hosts", "where": {"port_open_in": [80, 443]},
                            "as": "target_urls"}},
@@ -88,6 +88,7 @@ def test_save_workflow_round_trips(tmp_path):
     assert loaded.name == "rt"
     assert [s.id for s in loaded.steps] == ["discover", "shots"]
     assert loaded.steps[0].targets.from_ == "project"
+    assert loaded.steps[0].extra_args == ["--top-ports", "100"]
     shots = loaded.steps[1]
     assert shots.after == ["discover"]
     assert shots.gate is True

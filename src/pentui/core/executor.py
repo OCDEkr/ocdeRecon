@@ -122,11 +122,16 @@ def build_argv(
     *,
     profile: ToolProfile | None = None,
     options: OptionValues | None = None,
+    extra_args: Sequence[str] | None = None,
     targets: Sequence[str] | None = None,
     scan_dir: str | Path | None = None,
     sudo: bool = False,
 ) -> list[str]:
-    """Assemble the argv for a tool run. ``sudo`` is prepended only if requested."""
+    """Assemble the argv for a tool run. ``sudo`` is prepended only if requested.
+
+    Order: ``[sudo] binary <profile args> <option tokens> <extra_args>
+    <artifact flags> <targets>``. ``extra_args`` are operator-authored raw tokens.
+    """
     argv: list[str] = ["sudo"] if sudo else []
     argv.append(manifest.binary)
 
@@ -134,6 +139,9 @@ def build_argv(
         argv.extend(profile.args)
 
     argv.extend(_option_tokens(manifest, options or {}))
+
+    if extra_args:
+        argv.extend(extra_args)
 
     artifact = manifest.output.artifact
     if artifact is not None:

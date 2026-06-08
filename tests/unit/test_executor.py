@@ -54,6 +54,17 @@ def test_build_argv_option_types(nmap, tmp_path):
     assert "-T5" in argv          # choice, attached
 
 
+def test_build_argv_extra_args(nmap, tmp_path):
+    argv = build_argv(
+        nmap, options={"-sV": True}, extra_args=["--top-ports", "100"],
+        targets=["x"], scan_dir=tmp_path,
+    )
+    assert argv[argv.index("--top-ports"):argv.index("--top-ports") + 2] == ["--top-ports", "100"]
+    # extra args land after options but before the artifact flag and targets
+    assert argv.index("-sV") < argv.index("--top-ports") < argv.index("-oX")
+    assert argv[-1] == "x"
+
+
 def test_build_argv_sudo_prefix(nmap, tmp_path):
     argv = build_argv(nmap, options={"-sS": True}, targets=["x"], scan_dir=tmp_path, sudo=True)
     assert argv[0] == "sudo"
