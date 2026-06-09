@@ -84,3 +84,21 @@ def test_scan_repository_lifecycle(tmp_path):
     row = conn.execute("SELECT status, exit_code FROM scan WHERE id = ?;", (scan.id,)).fetchone()
     assert row["status"] == "done"
     assert row["exit_code"] == 0
+
+
+def test_count_running_counts_queued_and_running(tmp_path):
+    conn = db.init_db(tmp_path / "e.db")
+    conn.execute("INSERT INTO project (id, name) VALUES (1, 'p');")
+    conn.execute("INSERT INTO project (id, name) VALUES (2, 'other');")
+    conn.commit()
+    repo = ScanRepository(conn)
+
+    repo.create(Scan(project_id=1, tool="nmap", status=ScanStatus.RUNNING))
+    repo.create(Scan(project_id=1, tool="masscan", status=ScanStatus.QUEUED))
+    repo.create(Scan(project_id=1, tool="nmap", status=ScanStatus.DONE))
+    repo.create(Scan(project_id=1, tool="nmap", status=ScanStatus.ERROR))
+    repo.create(Scan(project_id=2, tool="nmap", status=ScanStatus.RUNNING))  # other project
+
+    assert repo.count_running(1) == 2
+    assert repo.count_running(2) == 1
+    assert repo.count_running(99) == 0

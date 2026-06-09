@@ -58,6 +58,19 @@ ruff check . && mypy src
 
 ## Install on another machine (Kali)
 
+**Fastest path — `deploy.sh`** handles all of the below (Python check, pipx,
+optional CLI tools) in one command:
+
+```bash
+./deploy.sh                # pipx install from this repo
+./deploy.sh --with-tools   # also apt-install the wrapped CLI tools
+./deploy.sh --venv         # install into ./.venv instead of pipx
+./deploy.sh --dev          # editable venv + dev extras (pytest/ruff/mypy)
+./deploy.sh --help
+```
+
+The manual steps it automates are below.
+
 `pentui` needs Python 3.11+ and the CLI tools it wraps (`nmap`, `masscan`,
 `gowitness`, `netexec`/`nxc`, `responder`, `impacket`/`ntlmrelayx`, `mitm6`, …);
 install those via `apt`/`pipx` as needed — pentui only orchestrates them, and
