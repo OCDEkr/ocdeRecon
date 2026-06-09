@@ -4,10 +4,14 @@
 # per /24, and gowitness batches over that directory.
 #
 # Set the engagement's targets/scope to the range to sweep (e.g. a /16), then run.
+# The per-/24 nmap scans run concurrently, bounded by `max_parallel` below (else
+# config.max_concurrent_scans, default 4) — so a /16 with dozens of live /24s
+# doesn't crawl one-at-a-time.
 name: subnet-recon
 description: "masscan a range, nmap per /24, screenshot every web service found"
 defaults:
   gates: true
+  max_parallel: 4               # at most N /24 nmap scans in flight at once
 
 steps:
   - id: discover

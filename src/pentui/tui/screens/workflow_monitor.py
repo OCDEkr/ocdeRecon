@@ -132,4 +132,28 @@ class WorkflowMonitorScreen(Screen[None]):
             gate_approver=self._approve,
         )
         await engine.run(self.workflow)
-        log.write("— workflow finished. Press r for results. —")
+        self._announce_done(engine)
+
+    def _announce_done(self, engine: WorkflowEngine) -> None:
+        """Signal a hands-off operator that the run finished (bell + summary)."""
+        from pentui.core.workflow import StepState
+
+        failed = sum(1 for s in engine.states.values() if s is StepState.ERROR)
+        skipped = sum(1 for s in engine.states.values() if s is StepState.SKIPPED)
+        done = sum(1 for s in engine.states.values() if s is StepState.DONE)
+        parts = [f"{done} done"]
+        if failed:
+            parts.append(f"{failed} failed")
+        if skipped:
+            parts.append(f"{skipped} skipped")
+        summary = f"{self.workflow.name}: {', '.join(parts)}"
+        self.query_one("#log", RichLog).write(
+            f"— workflow finished ({summary}). Press r for results. —"
+        )
+        self.app.bell()
+        self.notify(
+            f"{summary} — press r for results.",
+            title="Workflow finished",
+            severity="warning" if failed else "information",
+            timeout=10,
+        )

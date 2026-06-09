@@ -7,6 +7,7 @@ and initial targets, and deletes them (with confirmation).
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from typing import TYPE_CHECKING, cast
@@ -15,12 +16,13 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView
+from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Select
 
 from pentui.config import AppConfig
 from pentui.core.models import ScopeKind
 from pentui.core.registry import ToolRegistry
-from pentui.persistence.engagement import open_engagement
+from pentui.core.workflow import build_workflow_registry
+from pentui.persistence.engagement import Engagement, open_engagement
 from pentui.persistence.repositories import ScopeRuleRepository, TargetRepository
 from pentui.tui.screens.modals import ConfirmModal
 
@@ -52,6 +54,10 @@ class ProjectSelectScreen(Screen[None]):
         super().__init__()
         self.config = config
         self.registry = registry
+        self.workflows = build_workflow_registry(config.user_workflows_dir)
+
+    def _workflow_options(self) -> list[tuple[str, str]]:
+        return [(name, name) for name in self.workflows.names()]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -67,6 +73,13 @@ class ProjectSelectScreen(Screen[None]):
                         classes="field")
             yield Input(placeholder="excludes (optional)", id="excludes", classes="field")
             yield Input(placeholder="initial targets (optional)", id="targets", classes="field")
+            yield Label("Run workflow on create (unattended, optional):")
+            yield Select(
+                self._workflow_options(),
+                prompt="— none —",
+                id="kickoff",
+                classes="field",
+            )
             yield Horizontal(Button("Create & open", variant="primary", id="create"))
         yield Footer()
 
@@ -160,6 +173,8 @@ class ProjectSelectScreen(Screen[None]):
 
     def _open(self, name: str, *, create: bool = False) -> None:
         engagement = open_engagement(self.config, name)
+        kickoff: str | None = None
+        target_values: list[str] = []
         if create:
             client = self.query_one("#client", Input).value.strip()
             if client:
@@ -174,10 +189,41 @@ class ProjectSelectScreen(Screen[None]):
             for value in _split(self.query_one("#excludes", Input).value):
                 scopes.create(engagement.project_id, value, ScopeKind.EXCLUDE)
             targets = TargetRepository(engagement.conn)
-            for value in _split(self.query_one("#targets", Input).value):
+            target_values = _split(self.query_one("#targets", Input).value)
+            for value in target_values:
                 targets.create(engagement.project_id, value)
+            selected = self.query_one("#kickoff", Select).value
+            kickoff = selected if isinstance(selected, str) else None
 
         cast("PentuiApp", self.app).engagement = engagement
         from pentui.tui.screens.dashboard import DashboardScreen
 
         self.app.push_screen(DashboardScreen(engagement, self.registry, self.config))
+        if kickoff is not None:
+            self._launch_kickoff(engagement, kickoff, target_values)
+
+    def _launch_kickoff(
+        self, engagement: Engagement, name: str, targets: list[str]
+    ) -> None:
+        """Push the chosen recon workflow (unattended) on top of the dashboard."""
+        wf = self.workflows.get(name)
+        if wf is None:
+            return
+        # The recon chain starts with masscan over the engagement's targets; with
+        # none set the whole chain is a no-op, so don't bother launching.
+        if not targets:
+            self.notify(
+                f"'{name}' needs initial targets to scan (e.g. the /16) — "
+                "set them and launch it from the dashboard with 'w'.",
+                severity="warning",
+                timeout=8,
+            )
+            return
+        from pentui.tui.screens.workflow_monitor import WorkflowMonitorScreen
+
+        self.app.push_screen(
+            WorkflowMonitorScreen(
+                engagement, self.registry, self.config, wf,
+                unattended=True, is_root=os.geteuid() == 0,
+            )
+        )

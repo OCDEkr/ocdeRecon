@@ -28,11 +28,17 @@ folder of nmap XMLs). A workflow step may `foreach: subnet/24` to **fan out into
 one run per /24** of the hosts its `input` selects, and `file_from: {step, flag}`
 to feed a downstream file-input flag the **collected artifacts** of an upstream
 step (each run's artifact is copied into a per-step dir). The shipped
-`subnet-recon` workflow chains masscan → per-/24 nmap → gowitness this way. Running scans/steps can be stopped with `s` (the process
-group is terminated).
+`subnet-recon` workflow chains masscan → per-/24 nmap → gowitness this way, and
+its per-/24 nmap fan-out runs **bounded-parallel** (`defaults.max_parallel` per
+workflow, else `config.max_concurrent_scans`, default 4). Running scans/steps can
+be stopped with `s` (the process group is terminated). Creating an engagement can
+**auto-launch a workflow unattended** — pick one in the *"Run workflow on create"*
+dropdown on the new-engagement form (needs initial targets; otherwise launch from
+the dashboard with `w`). The workflow monitor rings a bell + notifies on finish.
 Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
-ntlmrelayx, mitm6, nessus. Deferred to future work (§14): parallel step execution,
-SQLCipher-encrypted engagements, PyInstaller packaging, scheduled runs.
+ntlmrelayx, mitm6, nessus. Deferred to future work (§14): parallel execution of
+independent *branches*, SQLCipher-encrypted engagements, PyInstaller packaging,
+scheduled runs.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.

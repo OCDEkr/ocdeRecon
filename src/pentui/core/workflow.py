@@ -14,6 +14,7 @@ a future optimization — see PROJECT.md §16.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import shutil
 from collections.abc import Awaitable, Callable
@@ -100,6 +101,9 @@ class WorkflowStep(BaseModel):
 
 class WorkflowDefaults(BaseModel):
     gates: bool = True
+    #: Max ``foreach`` runs in flight at once (e.g. per-/24 nmap scans). Falls
+    #: back to ``config.max_concurrent_scans`` when unset.
+    max_parallel: int | None = None
 
 
 class WorkflowDefinition(BaseModel):
@@ -275,11 +279,13 @@ class WorkflowEngine:
         self.step_runs: dict[str, StepRun] = {}
         self._steps_by_id: dict[str, WorkflowStep] = {}
         self._gates_honored = True
+        self._max_parallel = config.max_concurrent_scans
         self._wf_name = ""
 
     async def run(self, wf: WorkflowDefinition) -> WorkflowRun:
         self._steps_by_id = {s.id: s for s in wf.steps}
         self._gates_honored = wf.defaults.gates
+        self._max_parallel = wf.defaults.max_parallel or self.config.max_concurrent_scans
         self._wf_name = wf.name
         self.states = {s.id: StepState.PENDING for s in wf.steps}
 
@@ -376,14 +382,23 @@ class WorkflowEngine:
         use_sudo = requires_root(manifest, profile=profile, options=options) and not self.is_root
         artifacts_out = self.config.workflow_artifacts_dir(self.engagement.name, run_id, step.id)
 
-        all_ok = True
-        last_scan_id: int | None = None
-        for label, targets in groups:
-            ok, scan_id = await self._run_group(
-                step, manifest, profile, options, use_sudo, label, targets, artifacts_out
-            )
-            all_ok = all_ok and ok
-            last_scan_id = scan_id or last_scan_id
+        # Fan-out groups (e.g. per-/24 nmap scans) run concurrently, bounded so we
+        # don't launch hundreds of scans — or trip an IDS — at once. A single
+        # group degenerates to one task. Their DB writes happen in synchronous
+        # bursts between awaits, so the shared connection is never mid-transaction
+        # across coroutines; cancelling the worker (Stop) propagates through
+        # gather into each run_command, which terminates its process group.
+        sem = asyncio.Semaphore(max(1, self._max_parallel))
+
+        async def _bounded(label: str, targets: list[str]) -> tuple[bool, int | None]:
+            async with sem:
+                return await self._run_group(
+                    step, manifest, profile, options, use_sudo, label, targets, artifacts_out
+                )
+
+        results = await asyncio.gather(*(_bounded(label, t) for label, t in groups))
+        all_ok = all(ok for ok, _ in results)
+        last_scan_id = next((sid for _, sid in reversed(results) if sid), None)
 
         if all_ok:
             self._done(step, scan_id=last_scan_id)

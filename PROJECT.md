@@ -243,8 +243,10 @@ start each step.
 ### 7.1 Model — a branching DAG
 A **workflow** is a set of **steps**; each step names a tool (+ profile/options)
 and declares which steps it runs `after`. Edges form a directed acyclic graph,
-so one upstream step can fan out to several downstream tools, and independent
-branches run in parallel (subject to concurrency limits).
+so one upstream step can fan out to several downstream tools. A step's own
+`foreach` fan-out (e.g. per-/24 nmap scans) runs **concurrently, bounded** by
+`max_parallel`/`config.max_concurrent_scans`; independent *branches* still run
+sequentially in topological order (parallel branches deferred — see §14).
 
 ### 7.2 Data handoff — query the unified model
 A step gets its targets either from the project list or by **querying normalized
@@ -315,7 +317,8 @@ from host+port; `targets` emits IPs/hostnames; `ip_list`/file output for
 3. For each ready step, evaluate its `input` query against the DB, materialize
    targets, scope-check them.
 4. Apply gates (unless unattended): pending steps wait for approval in the monitor.
-5. Run ready steps via `ScanManager`/`Executor` (parallel within concurrency limit).
+5. Run the step; a `foreach` fan-out runs its groups in parallel within the
+   concurrency limit (`max_parallel` or `config.max_concurrent_scans`).
 6. On step completion, parse → persist → unblock dependents.
 7. **Failure policy** per step: `stop-branch` (default) or `continue`; a failed
    step marks its branch skipped but other branches proceed.
@@ -479,6 +482,8 @@ Done when, entirely from the TUI, an operator can:
   accessibility use Textual defaults for now.
 
 ### Deferred to later phases
+- Parallel execution of independent *branches* (foreach fan-out within a step is
+  already bounded-parallel; cross-branch parallelism is not).
 - SQLCipher encrypted engagements (passphrase to open).
 - PyInstaller single-binary distribution.
 - Scheduled / recurring workflow runs.

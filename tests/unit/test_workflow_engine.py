@@ -166,6 +166,78 @@ def engine_states_done(eng, run) -> bool:
     return all(s.status.value == "done" for s in steps) and len(steps) == 2
 
 
+# A tool that records peak simultaneity: it drops a marker, sleeps, then counts
+# how many markers exist at once (after the sleep, so every concurrently-admitted
+# run is present) and writes that count out. max(counts) == observed parallelism.
+FAKE_CONC_TMPL = """#!/usr/bin/env python3
+import glob, os, sys, time
+run_dir, peak_dir = {run_dir!r}, {peak_dir!r}
+me = os.path.join(run_dir, str(os.getpid()))
+open(me, "w").close()
+time.sleep(0.3)
+n = len(glob.glob(os.path.join(run_dir, "*")))
+open(os.path.join(peak_dir, str(os.getpid())), "w").write(str(n))
+os.remove(me)
+print("conc", sys.argv[-1])
+"""
+
+
+def _conc_setup(tmp_path: Path, *, subnets: int):
+    config, registry, eng = _setup(tmp_path)
+    run_dir = tmp_path / "conc_run"
+    peak_dir = tmp_path / "conc_peak"
+    run_dir.mkdir()
+    peak_dir.mkdir()
+    script = tmp_path / "fakeconc"
+    script.write_text(FAKE_CONC_TMPL.format(run_dir=str(run_dir), peak_dir=str(peak_dir)))
+    script.chmod(0o755)
+    (tmp_path / "tools" / "fakeconc.yaml").write_text(
+        f"name: fakeconc\nbinary: {script}\ntarget: {{mode: append}}\n"
+    )
+    registry.load_dir(tmp_path / "tools")
+    # One up host in each of `subnets` distinct /24s -> one foreach group each.
+    for i in range(subnets):
+        HostRepository(eng.conn).upsert(eng.project_id, Host(ip=f"10.0.{i}.5", state="up"))
+    return config, registry, eng, peak_dir
+
+
+def _conc_wf(*, max_parallel: int | None = None) -> WorkflowDefinition:
+    defaults = {"max_parallel": max_parallel} if max_parallel is not None else {}
+    return WorkflowDefinition.model_validate({
+        "name": "conc",
+        "defaults": defaults,
+        "steps": [
+            {"id": "scan", "tool": "fakeconc", "foreach": "subnet/24",
+             "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"}},
+        ],
+    })
+
+
+def _peak(peak_dir: Path) -> int:
+    return max((int(p.read_text()) for p in peak_dir.iterdir()), default=0)
+
+
+async def test_foreach_fanout_runs_in_parallel(tmp_path):
+    config, registry, eng, peak_dir = _conc_setup(tmp_path, subnets=3)
+    config.max_concurrent_scans = 4
+    await WorkflowEngine(eng, registry, config, unattended=True).run(_conc_wf())
+    assert _peak(peak_dir) == 3  # all three /24s overlapped
+
+
+async def test_foreach_fanout_is_bounded_by_config(tmp_path):
+    config, registry, eng, peak_dir = _conc_setup(tmp_path, subnets=3)
+    config.max_concurrent_scans = 2
+    await WorkflowEngine(eng, registry, config, unattended=True).run(_conc_wf())
+    assert _peak(peak_dir) == 2  # never more than the limit in flight
+
+
+async def test_workflow_max_parallel_overrides_config(tmp_path):
+    config, registry, eng, peak_dir = _conc_setup(tmp_path, subnets=3)
+    config.max_concurrent_scans = 4
+    await WorkflowEngine(eng, registry, config, unattended=True).run(_conc_wf(max_parallel=1))
+    assert _peak(peak_dir) == 1  # workflow caps below the config default
+
+
 async def test_declined_gate_skips_step_and_descendants(tmp_path):
     config, registry, eng = _setup(tmp_path)
     TargetRepository(eng.conn).create(eng.project_id, "10.0.0.1")

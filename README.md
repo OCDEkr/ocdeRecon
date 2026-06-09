@@ -23,8 +23,8 @@ next through the data-handoff query layer (e.g. *hosts with open 80/443 →
 gowitness URLs*), with approval gates and an unattended mode; engagements
 **export to Markdown/HTML/JSON/CSV**; and the UI has blue/white + colour-blind-safe
 themes (F2), tool-availability hints, and an audit-log viewer. Deferred to future
-work (`PROJECT.md` §14): parallel step execution, SQLCipher encryption, PyInstaller
-packaging, scheduled runs.
+work (`PROJECT.md` §14): parallel execution of independent branches, SQLCipher
+encryption, PyInstaller packaging, scheduled runs.
 
 Workflows are authored as **declarative YAML** (bundled under
 `src/pentui/workflows/`, or your own in `~/.config/pentui/workflows/`) and
@@ -36,7 +36,11 @@ can **save a configured scan as a named profile** (written to
 file-input option (e.g. gowitness `-f`) at a **directory** runs the tool once per
 matching file. Workflows can **fan out per /24** (`foreach: subnet/24`) and hand a
 downstream tool the **collected artifacts** of an upstream step (`file_from`) —
-see the shipped `subnet-recon` workflow (masscan → per-/24 nmap → gowitness). A
+see the shipped `subnet-recon` workflow (masscan → per-/24 nmap → gowitness),
+whose per-/24 nmap scans run **bounded-parallel** (`max_parallel`, else
+`max_concurrent_scans`, default 4). Creating an engagement can **auto-launch a
+workflow unattended** via the *"Run workflow on create"* dropdown (set initial
+targets first); the monitor bells + notifies when the chain finishes. A
 running scan or workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
 nslookup, gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
 
