@@ -1,0 +1,34 @@
+# Example workflow (PROJECT.md §7), consumed by the WorkflowEngine.
+# A branching DAG: nmap discovery fans out to web screenshots AND a deeper
+# service scan, each fed by querying the unified model produced upstream.
+#
+# Tools referenced (nmap, gowitness) ship as manifests under tools/. gowitness
+# must be installed for the web-shots step to run; if it isn't, that step errors
+# and — by default (stop-branch) — its branch stops, while other branches proceed.
+name: web-recon
+description: "Discover hosts, screenshot web services, deep-scan live hosts"
+defaults:
+  gates: true                      # honored unless the run is unattended
+
+steps:
+  - id: discover
+    tool: nmap
+    profile: "Quick"
+    targets: {from: project}       # use the engagement's target list
+
+  - id: web-shots
+    tool: gowitness
+    profile: "Single shots"
+    after: [discover]
+    input:
+      from: hosts
+      where: {port_open_in: [80, 443, 8080, 8443]}
+      as: target_urls              # host+port -> http(s)://host:port
+    gate: false                    # runs automatically
+
+  - id: service-scan
+    tool: nmap
+    profile: "Service scan"
+    after: [discover]
+    input: {from: hosts, where: {host_state: up}, as: targets}
+    gate: true                     # pause for operator approval first

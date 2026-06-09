@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engagement Report — {{ project.name }}</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 60rem;
+         color: #1a1a1a; line-height: 1.5; padding: 0 1rem; }
+  h1 { border-bottom: 2px solid #2563eb; padding-bottom: .3rem; }
+  h2 { margin-top: 2rem; border-bottom: 1px solid #ddd; }
+  table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+  th, td { border: 1px solid #ddd; padding: .3rem .5rem; text-align: left; font-size: .9rem; }
+  th { background: #f1f5f9; }
+  code { background: #f1f5f9; padding: .1rem .3rem; border-radius: 3px; }
+  .meta { color: #555; }
+  .sev-high, .sev-critical { color: #b91c1c; font-weight: bold; }
+  .sev-medium { color: #b45309; }
+  .muted { color: #888; }
+</style>
+</head>
+<body>
+<h1>Engagement Report — {{ project.name }}</h1>
+<p class="meta">
+  {% if project.client %}<strong>Client:</strong> {{ project.client }}<br>{% endif %}
+  <strong>Generated:</strong> {{ generated_at }}<br>
+  <strong>Activity window:</strong> {{ date_start or "—" }} → {{ date_end or "—" }}<br>
+  <strong>Scope (include):</strong> {{ includes | join(", ") if includes else "— none defined —" }}<br>
+  <strong>Scope (exclude):</strong> {{ excludes | join(", ") if excludes else "—" }}<br>
+  <strong>Targets:</strong> {{ targets | join(", ") if targets else "—" }}
+</p>
+
+<h2>Summary</h2>
+<ul>
+  <li>Hosts: {{ hosts | length }}</li>
+  <li>Open ports: {{ open_port_count }}</li>
+  <li>Findings: {{ findings | length }}</li>
+  <li>Scans: {{ scans | length }}</li>
+  <li>Workflow runs: {{ workflow_runs | length }}</li>
+</ul>
+
+<h2>Hosts</h2>
+{% for h in hosts %}
+<h3>{{ h.ip }}{% if h.hostname %} ({{ h.hostname }}){% endif %} <span class="muted">— {{ h.state }}</span></h3>
+{% if h.ports %}
+<table>
+  <tr><th>Port</th><th>State</th><th>Service</th><th>Product</th><th>Version</th></tr>
+  {% for p in h.ports %}
+  <tr><td>{{ p.number }}/{{ p.protocol }}</td><td>{{ p.state }}</td>
+      <td>{{ (p.service.name or "") if p.service else "" }}</td>
+      <td>{{ (p.service.product or "") if p.service else "" }}</td>
+      <td>{{ (p.service.version or "") if p.service else "" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No ports recorded.</p>{% endif %}
+{% else %}<p class="muted">No hosts discovered.</p>{% endfor %}
+
+<h2>Findings</h2>
+{% if findings %}
+<ul>
+{% for f in findings %}
+  <li><span class="sev-{{ f.severity }}">[{{ f.severity }}]</span>
+      {{ f.host_ip or "-" }} — {{ f.title }} <span class="muted">(via {{ f.source_tool }})</span></li>
+{% endfor %}
+</ul>
+{% else %}<p class="muted">No findings.</p>{% endif %}
+
+<h2>Scans</h2>
+{% if scans %}
+<ul>
+{% for s in scans %}
+  <li>#{{ s.id }} <strong>{{ s.tool }}</strong> ({{ s.profile or "manual" }}) — {{ s.status }},
+      exit {{ s.exit_code if s.exit_code is not none else "—" }}{% if s.ran_as_root %} [root]{% endif %}<br>
+      <code>{{ s.command_str or "" }}</code></li>
+{% endfor %}
+</ul>
+{% else %}<p class="muted">No scans.</p>{% endif %}
+
+{% if workflow_runs %}
+<h2>Workflow runs</h2>
+{% for wr in workflow_runs %}
+<p><strong>{{ wr.run.workflow_name }}</strong> — {{ wr.run.status }}{% if wr.run.unattended %} (unattended){% endif %}</p>
+<ul>
+{% for st in wr.steps %}
+  <li>{{ st.step_id }} [{{ st.tool }}] — {{ st.status }} <span class="muted">(gate: {{ st.gate_state }})</span></li>
+{% endfor %}
+</ul>
+{% endfor %}
+{% endif %}
+</body>
+</html>

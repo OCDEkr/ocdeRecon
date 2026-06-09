@@ -1,0 +1,22 @@
+# mitm6 — IPv6 DNS takeover (rogue DHCPv6 + DNS) to coerce Windows auth.
+# Long-running (runs until stopped); needs root for raw sockets. No targets;
+# scoped to a domain via -d. Commonly paired with ntlmrelayx.
+name: mitm6
+binary: mitm6
+description: "IPv6 DNS takeover for NTLM coercion (runs until stopped)"
+requires_root: true
+
+target:
+  mode: append            # no positional targets
+
+output:
+  stream: stdout
+
+options:
+  - {flag: "-d", label: "Target domain", type: value, placeholder: "e.g. corp.local"}
+  - {flag: "-i", label: "Interface", type: value, placeholder: "e.g. eth0"}
+  - {flag: "--ignore-nofqdn", label: "Ignore non-FQDN requests", type: bool}
+  - {flag: "-hw", label: "Host allowlist", type: value}
+
+profiles:
+  - {name: "Domain takeover", description: "Spoof DNS for a domain", args: []}

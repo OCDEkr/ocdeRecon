@@ -1,0 +1,34 @@
+# Nmap tool manifest (PROJECT.md §5).
+# Consumed by the manifest loader (Phase 1). Adding a tool = drop a file like
+# this in tools/ (packaged) or ~/.config/pentui/tools/ (user) — no code change.
+name: nmap
+binary: nmap                       # resolved on PATH; presence checked at load
+description: "Network mapper / port & service scanner"
+version_check: ["nmap", "--version"]
+
+target:
+  mode: append                     # append | flag  (how targets enter the argv)
+  # flag: "-iL"                    # if mode: flag, write a target file and pass it
+
+output:
+  stream: stdout                   # shown live in the monitor
+  artifact:                        # structured artifact for the parser
+    flag: "-oX"
+    path: "{scan_dir}/nmap.xml"    # {scan_dir} injected per-scan
+  parser: nmap_xml                 # -> parsers/nmap_xml.py registered as "nmap_xml"
+
+options:
+  - {flag: "-sS", label: "TCP SYN scan", type: bool, group: "Scan type", requires_root: true}
+  - {flag: "-sT", label: "TCP connect scan", type: bool, group: "Scan type"}
+  - {flag: "-sV", label: "Service/version detection", type: bool}
+  - {flag: "-O",  label: "OS detection", type: bool, requires_root: true}
+  - {flag: "-p",  label: "Ports", type: value, placeholder: "22,80,443 or 1-65535", validate: ports}
+  - {flag: "-T",  label: "Timing template", type: choice, choices: ["0", "1", "2", "3", "4", "5"], default: "4", attached: true}
+
+# Profiles are additive arg sets layered on top of the option form. Timing is
+# exposed as the -T option (default "4"), so profiles deliberately omit it to
+# avoid emitting -T twice.
+profiles:
+  - {name: "Quick",        description: "Fast scan of common ports", args: ["-F"]}
+  - {name: "Service scan", description: "Versions + default scripts", args: ["-sV", "-sC"]}
+  - {name: "Full TCP",     description: "All TCP ports, SYN scan", args: ["-sS", "-p-"], requires_root: true}

@@ -1,0 +1,33 @@
+# gowitness (v3) — web screenshot tool. Its `scan nmap -f <nmap.xml>` mode reads
+# an nmap XML and screenshots the discovered web services — the canonical
+# downstream of an nmap scan. The subcommand comes from the profile; the input
+# file and flags are options. Requires gowitness on PATH to run.
+#
+# Example built from this manifest (profile "Scan from nmap XML" + options):
+#   gowitness scan nmap -f nmap.xml --write-screenshots --log-scan-errors \
+#             --open-only --write-db --threads 16 --timeout 15
+name: gowitness
+binary: gowitness
+description: "Screenshot web services (gowitness v3)"
+
+target:
+  mode: append            # only used by "Scan single URL" (URLs appended)
+
+output:
+  stream: stdout          # gowitness writes screenshots/DB to its own store
+
+options:
+  - {flag: "-f", label: "Input (nmap XML, or a directory of them)", type: value,
+     placeholder: "nmap.xml or a dir of *.xml", file_input: true, file_glob: "*.xml"}
+  - {flag: "--write-screenshots", label: "Write screenshots to disk", type: bool}
+  - {flag: "--write-db", label: "Write results to the gowitness DB", type: bool}
+  - {flag: "--log-scan-errors", label: "Log scan errors", type: bool}
+  - {flag: "--open-only", label: "Only open ports (nmap input)", type: bool}
+  - {flag: "--threads", label: "Threads", type: value, default: "16"}
+  - {flag: "--timeout", label: "Per-target timeout (s)", type: value, default: "15"}
+  - {flag: "--screenshot-path", label: "Screenshot output dir", type: value}
+
+profiles:
+  - {name: "Scan from nmap XML", description: "Screenshot services from an nmap XML (-f)", args: ["scan", "nmap"]}
+  - {name: "Scan URL list file", description: "Screenshot URLs from a file (-f)", args: ["scan", "file"]}
+  - {name: "Scan single URL", description: "Screenshot the appended URL(s)", args: ["scan", "single"]}

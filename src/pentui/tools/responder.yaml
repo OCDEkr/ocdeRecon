@@ -1,0 +1,25 @@
+# Responder — LLMNR/NBT-NS/MDNS poisoner and rogue authentication server.
+# Long-running listener (no targets, no parsed artifact — streams to the log).
+# Always needs root (raw sockets / privileged binds). Bind it to an interface
+# via the -I option. Stop it from the monitor with Esc.
+name: responder
+binary: responder
+description: "LLMNR/NBT-NS/MDNS poisoner (listener — runs until stopped)"
+requires_root: true
+
+target:
+  mode: append            # listener takes no targets
+
+output:
+  stream: stdout
+
+options:
+  - {flag: "-I", label: "Interface", type: value, placeholder: "e.g. eth0"}
+  - {flag: "-A", label: "Analyze mode (passive, no poisoning)", type: bool}
+  - {flag: "-w", label: "Start WPAD rogue server", type: bool}
+  - {flag: "-d", label: "Answer DHCP requests", type: bool}
+  - {flag: "-v", label: "Verbose", type: bool}
+
+profiles:
+  - {name: "Analyze", description: "Passive — observe without poisoning", args: ["-A"]}
+  - {name: "Poison", description: "Active poisoning + WPAD", args: ["-w"]}
