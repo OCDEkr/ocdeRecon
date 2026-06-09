@@ -175,6 +175,50 @@ async def test_per_subnet_fanout_then_batch_gowitness(tmp_path):
     assert "10.0.1.0_24.xml" in shots_log and "10.0.2.0_24.xml" in shots_log
 
 
+def _fanout_step(target_mode: str) -> WorkflowStep:
+    return WorkflowStep.model_validate(
+        {
+            "id": "scan",
+            "tool": "fakenmap",
+            "foreach": "subnet/24",
+            "foreach_target": target_mode,
+            "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"},
+        }
+    )
+
+
+def test_foreach_subnet_mode_scans_whole_cidr(tmp_path):
+    # subnet mode: each hit /24 becomes a single CIDR target (the whole /24),
+    # never the original /16 — catches hosts a fast upstream sweep missed.
+    config, registry, eng = _fanout_setup(tmp_path)
+    engine = WorkflowEngine(eng, registry, config)
+    groups = engine._run_groups(_fanout_step("subnet"))
+    assert groups == [("10.0.1.0_24", ["10.0.1.0/24"]), ("10.0.2.0_24", ["10.0.2.0/24"])]
+
+
+def test_foreach_hosts_mode_scans_only_discovered_ips(tmp_path):
+    # hosts mode (default): each /24 targets just the discovered IPs.
+    config, registry, eng = _fanout_setup(tmp_path)
+    engine = WorkflowEngine(eng, registry, config)
+    groups = engine._run_groups(_fanout_step("hosts"))
+    assert groups == [
+        ("10.0.1.0_24", ["10.0.1.5", "10.0.1.6"]),
+        ("10.0.2.0_24", ["10.0.2.7"]),
+    ]
+
+
+def test_foreach_subnet_mode_falls_back_to_hosts_when_cidr_out_of_scope(tmp_path):
+    # When the full /24 isn't wholly in scope, subnet mode narrows to the
+    # in-scope discovered hosts rather than skipping the subnet or scanning out
+    # of scope. Scope here covers the two .1.x hosts (a /25) but not the /24, and
+    # excludes the .2.x subnet entirely.
+    config, registry, eng = _fanout_setup(tmp_path)
+    rules = [ScopeRule(project_id=eng.project_id, value="10.0.1.0/25", kind=ScopeKind.INCLUDE)]
+    engine = WorkflowEngine(eng, registry, config, scope_rules=rules)
+    groups = engine._run_groups(_fanout_step("subnet"))
+    assert groups == [("10.0.1.0_24", ["10.0.1.5", "10.0.1.6"])]
+
+
 def engine_states_done(eng, run) -> bool:
     steps = StepRunRepository(eng.conn).list_for_run(run.id)
     return all(s.status.value == "done" for s in steps) and len(steps) == 2

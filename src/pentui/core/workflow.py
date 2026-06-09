@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -92,6 +93,12 @@ class WorkflowStep(BaseModel):
     #: Fan out into one run per group, e.g. "subnet/24" runs once per /24 of the
     #: hosts selected by ``input``.
     foreach: str | None = None
+    #: What each ``foreach`` run targets. "hosts" (default) scans only the IPs
+    #: selected by ``input`` in that group; "subnet" scans the whole group CIDR
+    #: (e.g. 192.168.5.0/24) — catching hosts a fast upstream sweep (masscan)
+    #: missed — falling back to the in-scope hosts when the CIDR isn't wholly in
+    #: scope, so a hit subnet is never skipped nor scanned out of scope.
+    foreach_target: Literal["hosts", "subnet"] = "hosts"
     #: Feed a file-input flag (e.g. gowitness -f) the collected artifacts of an
     #: upstream step's runs (e.g. the per-/24 nmap XMLs), batching over them.
     file_from: FileFrom | None = None
@@ -333,6 +340,11 @@ class WorkflowEngine:
             return [t.value for t in TargetRepository(self.conn).list_for_project(self.project_id)]
         return []
 
+    def _in_scope(self, target: str) -> bool:
+        """True if ``target`` is allowed by scope. Quiet (no skip log/audit) —
+        used to decide a target *before* committing, unlike ``_scope_filter``."""
+        return all(not d.blocked for d in classify_targets(self.scope_rules, [target]))
+
     def _scope_filter(self, step: WorkflowStep, targets: list[str]) -> list[str]:
         kept: list[str] = []
         for decision in classify_targets(self.scope_rules, targets):
@@ -411,7 +423,15 @@ class WorkflowEngine:
             hosts = select_hosts(self.conn, self.project_id, step.input)
             groups: list[tuple[str, list[str]]] = []
             for net, group_hosts in group_by_subnet(hosts, prefix):
-                targets = self._scope_filter(step, materialize(group_hosts, step.input))
+                # "subnet" mode scans the whole group CIDR, but only if it's
+                # wholly in scope; otherwise narrow to the discovered in-scope
+                # hosts so a hit subnet is neither skipped nor scanned out of
+                # scope. "hosts" mode always scans just the selected IPs.
+                if step.foreach_target == "subnet" and self._in_scope(net):
+                    candidate = [net]
+                else:
+                    candidate = materialize(group_hosts, step.input)
+                targets = self._scope_filter(step, candidate)
                 if targets:
                     groups.append((net.replace("/", "_"), targets))
             return groups

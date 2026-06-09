@@ -23,7 +23,9 @@ steps:
     tool: nmap
     profile: "Service scan"
     after: [discover]
-    foreach: subnet/24            # run nmap once per /24 that has hosts
+    foreach: subnet/24            # run nmap once per /24 that masscan found hosts in
+    foreach_target: subnet        # scan the whole /24 (catches hosts masscan missed),
+                                  # not just masscan's hits — never the full /16
     input: {from: hosts, where: {host_state: up}, as: targets}
 
   - id: shots
