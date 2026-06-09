@@ -93,7 +93,7 @@ async def test_chain_feeds_one_tool_into_the_next(tmp_path):
 
     # the second tool received the URL materialized from the first tool's output
     steps = {s.step_id: s for s in StepRunRepository(eng.conn).list_for_run(run.id)}
-    shots_dir = config.scan_dir(eng.name, steps["shots"].scan_id)
+    shots_dir = config.scan_dir(eng.name, steps["shots"].scan_id, tool=steps["shots"].tool)
     assert (shots_dir / "stdout.log").read_text().strip() == "http://10.0.0.1:80"
 
 
@@ -171,7 +171,9 @@ async def test_per_subnet_fanout_then_batch_gowitness(tmp_path):
 
     # gowitness (fakeshot) batched once per collected file.
     steps = {s.step_id: s for s in StepRunRepository(eng.conn).list_for_run(run.id)}
-    shots_log = (config.scan_dir(eng.name, steps["shots"].scan_id) / "stdout.log").read_text()
+    shots_log = (
+        config.scan_dir(eng.name, steps["shots"].scan_id, tool=steps["shots"].tool) / "stdout.log"
+    ).read_text()
     assert "10.0.1.0_24.xml" in shots_log and "10.0.2.0_24.xml" in shots_log
 
 

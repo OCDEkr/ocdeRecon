@@ -66,5 +66,5 @@ async def test_batch_runs_once_per_file(tmp_path):
         eng = app.engagement
         scan = ScanRepository(eng.conn).list_recent(eng.project_id)[0]
         assert scan.status is ScanStatus.DONE
-        log = (config.scan_dir("batch", scan.id) / "stdout.log").read_text()
+        log = (config.scan_dir("batch", scan.id, tool=scan.tool) / "stdout.log").read_text()
         assert "net-a.xml" in log and "net-b.xml" in log

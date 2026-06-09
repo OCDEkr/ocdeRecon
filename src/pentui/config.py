@@ -62,9 +62,25 @@ class AppConfig:
     def engagement_db_path(self, name: str) -> Path:
         return self.engagement_dir(name) / "engagement.db"
 
-    def scan_dir(self, engagement: str, scan_id: int) -> Path:
+    def tool_output_root(self, engagement: str, tool: str | None = None) -> Path:
+        """Base dir for a tool's scans in an engagement (each scan is a numbered
+        subdir below this).
+
+        Default groups each tool's output in its own folder:
+        ``<engagement>/scans/<tool>``. A per-tool override (see
+        ``tool_output_dirs``) relocates it to ``<override>/<engagement>`` —
+        still namespaced per engagement so engagements never collide. This is
+        registry-driven: any tool name works with no per-tool code.
+        """
+        override = self.tool_output_dirs().get(tool or "") if tool else ""
+        if override:
+            return Path(override).expanduser() / engagement
+        base = self.engagement_dir(engagement) / "scans"
+        return base / tool if tool else base
+
+    def scan_dir(self, engagement: str, scan_id: int, tool: str | None = None) -> Path:
         """Where a scan's raw stdout log and artifacts (e.g. nmap.xml) are written."""
-        return self.engagement_dir(engagement) / "scans" / str(scan_id)
+        return self.tool_output_root(engagement, tool) / str(scan_id)
 
     def reports_dir(self, engagement: str) -> Path:
         """Where exported reports are written for an engagement."""
@@ -98,3 +114,24 @@ class AppConfig:
     def save_settings(self, settings: dict[str, Any]) -> None:
         self.settings_file.parent.mkdir(parents=True, exist_ok=True)
         self.settings_file.write_text(json.dumps(settings, indent=2))
+
+    def tool_output_dirs(self) -> dict[str, str]:
+        """Per-tool output-directory overrides (``{tool: base_dir}``). Only
+        non-empty string entries are kept; everything else is the default."""
+        raw = self.load_settings().get("tool_output_dirs", {})
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): v for k, v in raw.items() if isinstance(v, str) and v}
+
+    def set_tool_output_dir(self, tool: str, directory: str | None) -> None:
+        """Set (or clear, when ``directory`` is falsy) a tool's output-dir override."""
+        settings = self.load_settings()
+        dirs = settings.get("tool_output_dirs")
+        if not isinstance(dirs, dict):
+            dirs = {}
+        if directory and directory.strip():
+            dirs[tool] = directory.strip()
+        else:
+            dirs.pop(tool, None)
+        settings["tool_output_dirs"] = dirs
+        self.save_settings(settings)

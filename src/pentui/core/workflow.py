@@ -462,7 +462,7 @@ class WorkflowEngine:
             )
         )
         assert scan.id is not None
-        scan_dir = self.config.scan_dir(self.engagement.name, scan.id)
+        scan_dir = self.config.scan_dir(self.engagement.name, scan.id, tool=step.tool)
         try:
             runs = build_runs(
                 manifest,
