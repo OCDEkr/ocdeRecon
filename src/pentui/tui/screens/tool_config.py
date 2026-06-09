@@ -277,7 +277,7 @@ class ToolConfigScreen(Screen[None]):
             )
         )
         assert scan.id is not None
-        scan_dir = str(self.config.scan_dir(self.engagement.name, scan.id))
+        scan_dir = str(self.config.scan_dir(self.engagement.name, scan.id, tool=self.manifest.name))
         runs = build_runs(
             self.manifest,
             profile=profile,
