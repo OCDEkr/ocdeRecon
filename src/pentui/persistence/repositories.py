@@ -132,6 +132,18 @@ class ScanRepository:
             for r in rows
         ]
 
+    def count_running(self, project_id: int) -> int:
+        """Number of scans currently queued or running for the project.
+
+        Drives the dashboard's live "N scans running" indicator, including
+        unattended workflow/kickoff steps that run in the background.
+        """
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM scan WHERE project_id = ? AND status IN (?, ?);",
+            (project_id, ScanStatus.QUEUED.value, ScanStatus.RUNNING.value),
+        ).fetchone()
+        return int(row["n"])
+
 
 class ScopeRuleRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:

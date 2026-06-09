@@ -3,7 +3,9 @@
 Overview of one engagement: client, scope, target/result counts, and recent
 scans — plus the launch points for a new scan, workflows, results, export, and
 the audit log. Refreshed whenever the screen is shown so it reflects scans run
-since it was opened.
+since it was opened. A persistent "N scans running" indicator polls the scan
+table on a timer so it tracks unattended workflow/kickoff steps live, even while
+the operator sits on the dashboard.
 """
 
 from __future__ import annotations
@@ -36,8 +38,14 @@ class DashboardScreen(Screen[None]):
     DEFAULT_CSS = """
     DashboardScreen { layout: vertical; }
     #summary { height: auto; border: round $panel; margin: 0 1; padding: 0 1; }
+    #running { height: 1; margin: 0 1; padding: 0 1; }
+    #running.active { background: $warning; color: $text; text-style: bold; }
     #scans { height: 1fr; border: round $panel; margin: 0 1; }
     """
+
+    # How often to re-poll the running-scan count while the dashboard is shown,
+    # so the indicator tracks unattended workflow/kickoff steps live.
+    _RUNNING_POLL_SECONDS = 2.0
 
     BINDINGS = [
         ("n", "new_scan", "New scan"),
@@ -58,11 +66,15 @@ class DashboardScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield VerticalScroll(Static(id="summary"))
+        yield Static(id="running")
         yield DataTable(id="scans")
         yield Footer()
 
     def on_mount(self) -> None:
         self._refresh()
+        # Keep the running-scan indicator live even while the operator sits on
+        # the dashboard (kickoff/workflow steps finish in the background).
+        self.set_interval(self._RUNNING_POLL_SECONDS, self._update_running)
 
     def on_screen_resume(self) -> None:
         # Returning from a scan/workflow — reflect any new results.
@@ -70,6 +82,7 @@ class DashboardScreen(Screen[None]):
 
     def _refresh(self) -> None:
         self.query_one("#summary", Static).update(self._summary_text())
+        self._update_running()
         table = self.query_one("#scans", DataTable)
         if not table.columns:
             table.add_columns(*_SCAN_COLUMNS)
@@ -86,6 +99,20 @@ class DashboardScreen(Screen[None]):
             )
         if not scans:
             table.add_row("-", "(no scans yet — press n)", "-", "-", "-", "-")
+
+    def _update_running(self) -> None:
+        """Update the persistent 'N scans running' indicator."""
+        try:
+            indicator = self.query_one("#running", Static)
+        except Exception:
+            return  # not composed yet (timer can fire mid-teardown)
+        n = ScanRepository(self.engagement.conn).count_running(self.engagement.project_id)
+        if n:
+            indicator.add_class("active")
+            indicator.update(f"▶  {n} scan{'s' if n != 1 else ''} running")
+        else:
+            indicator.remove_class("active")
+            indicator.update("[dim]no scans running[/dim]")
 
     def _summary_text(self) -> str:
         conn = self.engagement.conn
