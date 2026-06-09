@@ -7,8 +7,11 @@ skip-and-log (even when unattended).
 
 Rules and targets may be IPs, CIDR ranges, or hostnames. IP/CIDR targets are
 checked with the stdlib ``ipaddress`` module (a target network must sit entirely
-within an include range and not overlap any exclude). Hostnames are matched by
-exact string (no DNS resolution — that would itself touch the network).
+within an include range and not overlap any exclude). Hostnames match a rule
+exactly OR as a subdomain of it — an include/exclude of ``example.com`` covers
+``www.example.com`` (but not ``notexample.com``). This lets domain scoping work
+with dynamically discovered subdomains (e.g. sublist3r). No DNS resolution is
+done — that would itself touch the network.
 """
 
 from __future__ import annotations
@@ -102,11 +105,25 @@ class ScopeChecker:
         return ScopeDecision(target, ScopeStatus.OUT_OF_SCOPE, "not within any include range")
 
     def _classify_host(self, target: str) -> ScopeDecision:
-        if target in self.exclude_hosts:
+        if self._host_in(target, self.exclude_hosts):
             return ScopeDecision(target, ScopeStatus.OUT_OF_SCOPE, "matches an exclude rule")
-        if target in self.include_hosts:
+        if self._host_in(target, self.include_hosts):
             return ScopeDecision(target, ScopeStatus.IN_SCOPE, "matches an include rule")
         return ScopeDecision(target, ScopeStatus.OUT_OF_SCOPE, "hostname not in scope")
+
+    @staticmethod
+    def _host_in(target: str, rules: set[str]) -> bool:
+        """True if ``target`` equals a rule or is a subdomain of one.
+
+        ``example.com`` matches ``example.com`` and ``www.example.com`` but not
+        ``notexample.com`` (the boundary must fall on a dotted label).
+        """
+        host = target.rstrip(".").lower()
+        for rule in rules:
+            r = rule.rstrip(".").lower()
+            if host == r or host.endswith("." + r):
+                return True
+        return False
 
 
 def classify_targets(rules: Iterable[ScopeRule], targets: Iterable[str]) -> list[ScopeDecision]:

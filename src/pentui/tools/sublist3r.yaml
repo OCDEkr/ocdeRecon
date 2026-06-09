@@ -1,0 +1,27 @@
+# sublist3r — passive subdomain enumeration for a domain.
+# The engagement's domain target is passed as `-d <domain>` (flag_each), and the
+# discovered subdomains are written to -o and parsed into the unified model as
+# hostname-keyed hosts, ready for a downstream nmap scan. No root needed.
+#
+# Note: sublist3r enumerates one root domain per run; with several domain targets
+# only the last -d is honoured by sublist3r. Run one domain per engagement, or one
+# per kickoff.
+name: sublist3r
+binary: sublist3r
+description: "Passive subdomain enumeration"
+
+target:
+  mode: flag_each         # nmap-style targets don't fit; pass each as -d <domain>
+  flag: "-d"
+
+output:
+  stream: stdout
+  artifact:
+    flag: "-o"
+    path: "{scan_dir}/subdomains.txt"
+  parser: sublist3r
+
+options:
+  - {flag: "-v", label: "Verbose", type: bool}
+  - {flag: "-t", label: "Enumeration threads", type: value, placeholder: "e.g. 30"}
+  - {flag: "-p", label: "Also check ports (e.g. 80,443)", type: value, placeholder: "80,443"}

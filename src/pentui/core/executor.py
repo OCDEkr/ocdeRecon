@@ -155,6 +155,11 @@ def build_argv(
     if targets:
         if manifest.target.mode is TargetMode.APPEND:
             argv.extend(targets)
+        elif manifest.target.mode is TargetMode.FLAG_EACH:
+            # Each target inline as `flag <target>` (e.g. sublist3r -d domain).
+            assert manifest.target.flag is not None  # guaranteed by TargetSpec validation
+            for target in targets:
+                argv.extend([manifest.target.flag, target])
         else:  # TargetMode.FLAG — write a target file and pass it
             if scan_dir is None:
                 raise ExecutorError("target.mode 'flag' requires a scan_dir for the target file")

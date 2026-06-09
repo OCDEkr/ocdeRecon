@@ -1,0 +1,24 @@
+# subdomain-recon — enumerate a domain's subdomains, then port-scan them.
+#
+#   enum : sublist3r -d <engagement domain> -> records each subdomain as a host
+#   scan : nmap (service scan) over the discovered subdomains
+#
+# Set the engagement's target to the root domain (e.g. example.com) and scope it
+# the same way — domain scope now covers subdomains, so discovered names like
+# www.example.com are in scope and out-of-scope hosts are still skipped.
+#
+# The scan step targets every host that carries a hostname (i.e. the enumerated
+# subdomains). nmap then resolves and records the real-IP hosts alongside.
+name: subdomain-recon
+description: "Enumerate subdomains for a domain and port-scan them"
+
+steps:
+  - id: enum
+    tool: sublist3r
+    targets: {from: project}
+
+  - id: scan
+    tool: nmap
+    profile: "Service scan"
+    after: [enum]
+    input: {from: hosts, where: {hostname_matches: "."}, as: targets}
