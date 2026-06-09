@@ -86,6 +86,16 @@ def test_hostname_matches(conn):
     assert run_query(conn, 1, _q(hostname_matches=r"nope")) == []
 
 
+def test_smb_signing_in_selects_relay_targets(conn):
+    hosts = HostRepository(conn)
+    hosts.upsert(1, Host(ip="10.0.0.10", smb_signing="disabled"))
+    hosts.upsert(1, Host(ip="10.0.0.11", smb_signing="required"))
+    # Only the signing-disabled host is a relay target; materialised as an IP list.
+    assert run_query(conn, 1, _q(smb_signing_in=["disabled"], as_=Materializer.IP_LIST)) == [
+        "10.0.0.10"
+    ]
+
+
 def test_empty_where_returns_all_as_targets(conn):
     # hostname-or-ip for every host, deduped, in ip order
     assert run_query(conn, 1, _q()) == ["web1", "10.0.0.2", "10.0.0.3"]

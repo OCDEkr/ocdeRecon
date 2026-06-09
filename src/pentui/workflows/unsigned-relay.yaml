@@ -1,0 +1,36 @@
+# unsigned-relay — produce a relay target list of SMB hosts with signing disabled.
+#
+#   discover : nmap the engagement targets for tcp/445
+#   finger   : RunFinger those :445 hosts -> records host.smb_signing
+#   relay    : ntlmrelayx fed ONLY the signing-disabled hosts (its -tf target file)
+#
+# The handoff is via the unified model (host.smb_signing), not artifact files, so
+# the relay step simply queries "hosts where smb_signing == disabled" as an
+# ip_list. ntlmrelayx is long-running and elevates (root) — it's gated so an
+# operator confirms before the relay actually starts. Scope still applies to
+# every step, so out-of-scope hosts are never fingered or relayed to.
+name: unsigned-relay
+description: "Find SMB hosts with signing disabled and stage them for NTLM relay"
+
+defaults:
+  gates: true
+
+steps:
+  - id: discover
+    tool: nmap
+    profile: Quick
+    options: {"-p": "445"}
+    targets: {from: project}
+
+  - id: finger
+    tool: runfinger
+    profile: Grepable
+    after: [discover]
+    input: {from: hosts, where: {port_open_in: [445]}, as: ip_list}
+
+  - id: relay
+    tool: ntlmrelayx
+    profile: Relay
+    after: [finger]
+    gate: true
+    input: {from: hosts, where: {smb_signing_in: ["disabled"]}, as: ip_list}

@@ -7,7 +7,8 @@ the same Host/Port/Service/Finding model, any upstream tool can feed any
 downstream one.
 
 `where` conditions (combined with AND): ``host_state``, ``port_open_in``,
-``service_name_in``, ``has_finding_severity``, ``hostname_matches``.
+``service_name_in``, ``has_finding_severity``, ``hostname_matches``,
+``smb_signing_in``.
 `as` materializers: ``targets`` (hostname or IP), ``target_urls`` (host+port ->
 http(s) URL), ``ip_list`` (IP only).
 """
@@ -44,6 +45,8 @@ class WhereSpec(BaseModel):
     service_name_in: list[str] = Field(default_factory=list)
     has_finding_severity: Severity | None = None
     hostname_matches: str | None = None
+    #: Select hosts by SMB signing state (e.g. ["disabled"] for relay targets).
+    smb_signing_in: list[str] = Field(default_factory=list)
 
 
 class QuerySpec(BaseModel):
@@ -71,6 +74,8 @@ def _matches(host: Host, where: WhereSpec, host_findings: set[Severity]) -> bool
         if names.isdisjoint(where.service_name_in):
             return False
     if where.has_finding_severity is not None and where.has_finding_severity not in host_findings:
+        return False
+    if where.smb_signing_in and host.smb_signing not in where.smb_signing_in:
         return False
     return not (
         where.hostname_matches is not None
