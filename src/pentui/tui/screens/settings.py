@@ -1,11 +1,10 @@
 """Settings screen (PROJECT.md §11).
 
-Per-tool output-directory overrides. Each tool's scan output (stdout log +
-artifacts) defaults to ``<engagement>/scans/<tool>/<scan_id>`` — its own folder
-per engagement. Pointing a tool at a custom base relocates it to
-``<base>/<engagement>/<scan_id>``, still namespaced per engagement so they never
-collide. The list is driven by the tool registry, so tools added later (a new
-manifest, no code) get a row here automatically.
+The scan-output root (the "pentests" folder). Each engagement gets its own
+folder under it, and each tool its own subfolder:
+``<root>/<engagement>/scans/<tool>/<scan_id>``. Blank keeps scans under the XDG
+data dir. Only the root is configured; the per-engagement and per-tool structure
+(registry-driven) follows automatically, so tools added later need no change here.
 """
 
 from __future__ import annotations
@@ -21,12 +20,11 @@ from pentui.core.registry import ToolRegistry
 
 
 class SettingsScreen(Screen[None]):
-    """Edit per-tool output-directory overrides."""
+    """Edit the scan-output root directory."""
 
     DEFAULT_CSS = """
     SettingsScreen { layout: vertical; }
-    #tools { height: 1fr; border: round $panel; margin: 0 1; padding: 0 1; }
-    #intro { color: $text-muted; padding: 0 1; }
+    #body { height: 1fr; border: round $panel; margin: 0 1; padding: 1; }
     .field { height: auto; margin-bottom: 1; }
     .field Label { color: $accent; }
     .hint { color: $text-muted; }
@@ -43,31 +41,21 @@ class SettingsScreen(Screen[None]):
         super().__init__()
         self.registry = registry
         self.config = config
-        #: tool name -> its dir Input (avoids relying on tool names as widget ids).
-        self._inputs: dict[str, Input] = {}
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(
-            "Per-tool output directory. Blank = default "
-            "(<engagement>/scans/<tool>). A custom base becomes "
-            "<base>/<engagement>/<scan_id>.",
-            id="intro",
+        current = self.config.output_root()
+        yield VerticalScroll(
+            Label("Scan output root"),
+            Input(
+                value=str(current) if current else "",
+                placeholder="e.g. ~/pentests  (blank = default XDG data dir)",
+                id="root",
+            ),
+            Static(self._preview(str(current) if current else ""), classes="hint", id="preview"),
+            classes="field",
+            id="body",
         )
-        overrides = self.config.tool_output_dirs()
-        fields = []
-        for name in self.registry.names():
-            box = Input(value=overrides.get(name, ""), placeholder=f"default: …/scans/{name}")
-            self._inputs[name] = box
-            fields.append(
-                VerticalScroll(
-                    Label(name),
-                    box,
-                    Static(f"→ {self._preview(name, overrides.get(name, ''))}", classes="hint"),
-                    classes="field",
-                )
-            )
-        yield VerticalScroll(*fields, id="tools")
         yield Horizontal(
             Button("Save", id="save", variant="primary"),
             Button("Back", id="back"),
@@ -75,27 +63,21 @@ class SettingsScreen(Screen[None]):
         )
         yield Footer()
 
-    @staticmethod
-    def _preview(tool: str, override: str) -> str:
-        if override.strip():
-            return f"{override.strip().rstrip('/')}/<engagement>/<scan_id>"
-        return f"<engagement>/scans/{tool}/<scan_id>"
+    def _preview(self, root: str) -> str:
+        # Show a concrete resolved path so the layout is obvious. Pick any tool
+        # name just to illustrate the per-engagement / per-tool structure.
+        sample = self.registry.names()[0] if self.registry.names() else "nmap"
+        base = root.strip().rstrip("/") if root.strip() else "<xdg-data>/engagements"
+        return f"→ {base}/<engagement>/scans/{sample}/<scan_id>"
 
-    @on(Input.Changed)
+    @on(Input.Changed, "#root")
     def _live_preview(self, event: Input.Changed) -> None:
-        # Update the hint under the changed field so the resolved path is visible.
-        for name, box in self._inputs.items():
-            if box is event.input:
-                field = box.parent
-                if field is not None:
-                    field.query_one(".hint", Static).update(f"→ {self._preview(name, event.value)}")
-                break
+        self.query_one("#preview", Static).update(self._preview(event.value))
 
     @on(Button.Pressed, "#save")
     def _save(self) -> None:
-        for name, box in self._inputs.items():
-            self.config.set_tool_output_dir(name, box.value)
-        self.notify("Output directories saved.")
+        self.config.set_output_root(self.query_one("#root", Input).value)
+        self.notify("Scan output root saved.")
         self.app.pop_screen()
 
     @on(Button.Pressed, "#back")

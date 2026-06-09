@@ -1,8 +1,10 @@
-"""TUI test: the settings panel sets a per-tool output directory override."""
+"""TUI test: the settings panel sets the scan-output root."""
 
 from __future__ import annotations
 
 from pathlib import Path
+
+from textual.widgets import Input
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
@@ -19,7 +21,7 @@ def _config(tmp_path: Path) -> AppConfig:
     return config
 
 
-async def test_settings_panel_sets_tool_output_dir(tmp_path):
+async def test_settings_panel_sets_output_root(tmp_path):
     config = _config(tmp_path)
     app = PentuiApp(config=config)
     async with app.run_test(size=(100, 50)) as pilot:
@@ -27,11 +29,11 @@ async def test_settings_panel_sets_tool_output_dir(tmp_path):
         await pilot.press("s")  # dashboard -> settings
         await pilot.pause()
 
-        app.screen._inputs["echo"].value = "/mnt/evidence/echo"
+        app.screen.query_one("#root", Input).value = "/home/op/pentests"
         await pilot.pause()
         await pilot.click("#save")
         await pilot.pause()
 
-    # Persisted, and the override now drives the per-engagement scan path.
-    assert config.tool_output_dirs()["echo"] == "/mnt/evidence/echo"
-    assert config.scan_dir("acme", 3, tool="echo") == Path("/mnt/evidence/echo/acme/3")
+    # Persisted, and it now drives the per-engagement / per-tool scan path.
+    assert config.output_root() == Path("/home/op/pentests")
+    assert config.scan_dir("acme", 3, tool="echo") == Path("/home/op/pentests/acme/scans/echo/3")

@@ -64,19 +64,18 @@ class AppConfig:
 
     def tool_output_root(self, engagement: str, tool: str | None = None) -> Path:
         """Base dir for a tool's scans in an engagement (each scan is a numbered
-        subdir below this).
+        subdir below this): ``<root>/<engagement>/scans/<tool>``.
 
-        Default groups each tool's output in its own folder:
-        ``<engagement>/scans/<tool>``. A per-tool override (see
-        ``tool_output_dirs``) relocates it to ``<override>/<engagement>`` —
-        still namespaced per engagement so engagements never collide. This is
-        registry-driven: any tool name works with no per-tool code.
+        ``<root>`` is the configurable output root (see ``output_root``) — e.g.
+        ``~/pentests`` — or the XDG engagements dir when unset. The engagement
+        and per-tool segments are always present, so the same tool lands in
+        different paths per engagement and each tool keeps its own folder. This
+        is registry-driven: any tool name works with no per-tool code.
         """
-        override = self.tool_output_dirs().get(tool or "") if tool else ""
-        if override:
-            return Path(override).expanduser() / engagement
-        base = self.engagement_dir(engagement) / "scans"
-        return base / tool if tool else base
+        root = self.output_root()
+        base = (root / engagement) if root else self.engagement_dir(engagement)
+        scans = base / "scans"
+        return scans / tool if tool else scans
 
     def scan_dir(self, engagement: str, scan_id: int, tool: str | None = None) -> Path:
         """Where a scan's raw stdout log and artifacts (e.g. nmap.xml) are written."""
@@ -115,23 +114,18 @@ class AppConfig:
         self.settings_file.parent.mkdir(parents=True, exist_ok=True)
         self.settings_file.write_text(json.dumps(settings, indent=2))
 
-    def tool_output_dirs(self) -> dict[str, str]:
-        """Per-tool output-directory overrides (``{tool: base_dir}``). Only
-        non-empty string entries are kept; everything else is the default."""
-        raw = self.load_settings().get("tool_output_dirs", {})
-        if not isinstance(raw, dict):
-            return {}
-        return {str(k): v for k, v in raw.items() if isinstance(v, str) and v}
+    def output_root(self) -> Path | None:
+        """Configurable base dir for scan output (the "pentests" folder), under
+        which each engagement gets ``<engagement>/scans/<tool>/<scan_id>``.
+        ``None`` (the default) keeps scans under the XDG engagements dir."""
+        raw = self.load_settings().get("output_root")
+        return Path(raw).expanduser() if isinstance(raw, str) and raw.strip() else None
 
-    def set_tool_output_dir(self, tool: str, directory: str | None) -> None:
-        """Set (or clear, when ``directory`` is falsy) a tool's output-dir override."""
+    def set_output_root(self, directory: str | None) -> None:
+        """Set (or clear, when ``directory`` is falsy) the scan-output root."""
         settings = self.load_settings()
-        dirs = settings.get("tool_output_dirs")
-        if not isinstance(dirs, dict):
-            dirs = {}
         if directory and directory.strip():
-            dirs[tool] = directory.strip()
+            settings["output_root"] = directory.strip()
         else:
-            dirs.pop(tool, None)
-        settings["tool_output_dirs"] = dirs
+            settings.pop("output_root", None)
         self.save_settings(settings)

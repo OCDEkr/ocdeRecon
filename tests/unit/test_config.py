@@ -1,4 +1,4 @@
-"""Per-tool, per-engagement scan output paths and overrides."""
+"""Scan output paths: per-engagement, per-tool, under a configurable root."""
 
 from __future__ import annotations
 
@@ -13,12 +13,10 @@ def _config(tmp_path: Path) -> AppConfig:
     return config
 
 
-def test_scan_dir_groups_by_tool_per_engagement(tmp_path):
+def test_scan_dir_default_groups_by_engagement_and_tool(tmp_path):
     config = _config(tmp_path)
     nmap = config.scan_dir("acme", 7, tool="nmap")
     masscan = config.scan_dir("acme", 7, tool="masscan")
-    # Each tool gets its own folder under the engagement; different tools,
-    # different dirs (even with the same scan id).
     assert nmap == config.engagement_dir("acme") / "scans" / "nmap" / "7"
     assert masscan == config.engagement_dir("acme") / "scans" / "masscan" / "7"
     assert nmap != masscan
@@ -29,39 +27,43 @@ def test_scan_dir_without_tool_is_flat(tmp_path):
     assert config.scan_dir("acme", 7) == config.engagement_dir("acme") / "scans" / "7"
 
 
-def test_tool_output_override_relocates_per_engagement(tmp_path):
+def test_output_root_matches_the_pentests_layout(tmp_path):
     config = _config(tmp_path)
-    config.set_tool_output_dir("nmap", "/mnt/evidence/nmap")
-    # Overridden tool: rooted at the custom base, still namespaced per engagement.
-    assert config.scan_dir("acme", 7, tool="nmap") == Path("/mnt/evidence/nmap/acme/7")
-    assert config.scan_dir("globex", 9, tool="nmap") == Path("/mnt/evidence/nmap/globex/9")
-    # A tool without an override keeps the default per-tool layout.
-    assert config.scan_dir("acme", 7, tool="masscan") == (
-        config.engagement_dir("acme") / "scans" / "masscan" / "7"
+    config.set_output_root("/home/op/pentests")
+    # <root>/<engagement>/scans/<tool>/<scan_id> — the same tool differs by engagement.
+    assert config.scan_dir("engagement1", 3, tool="nmap") == Path(
+        "/home/op/pentests/engagement1/scans/nmap/3"
+    )
+    assert config.scan_dir("engagement2", 7, tool="nmap") == Path(
+        "/home/op/pentests/engagement2/scans/nmap/7"
+    )
+    # Different tools keep their own folders under the same engagement.
+    assert config.scan_dir("engagement1", 3, tool="gowitness") == Path(
+        "/home/op/pentests/engagement1/scans/gowitness/3"
     )
 
 
-def test_override_expands_user(tmp_path):
+def test_output_root_expands_user(tmp_path):
     config = _config(tmp_path)
-    config.set_tool_output_dir("gowitness", "~/shots")
-    assert config.scan_dir("acme", 1, tool="gowitness") == Path.home() / "shots" / "acme" / "1"
+    config.set_output_root("~/pentests")
+    assert config.scan_dir("acme", 1, tool="nmap") == (
+        Path.home() / "pentests" / "acme" / "scans" / "nmap" / "1"
+    )
 
 
-def test_set_and_clear_override_round_trips(tmp_path):
+def test_set_and_clear_output_root_round_trips(tmp_path):
     config = _config(tmp_path)
-    config.set_tool_output_dir("nmap", "/data/nmap")
-    assert config.tool_output_dirs() == {"nmap": "/data/nmap"}
-    # Whitespace is trimmed; blank clears the entry.
-    config.set_tool_output_dir("masscan", "  /data/masscan  ")
-    assert config.tool_output_dirs()["masscan"] == "/data/masscan"
-    config.set_tool_output_dir("nmap", "")
-    assert "nmap" not in config.tool_output_dirs()
-    config.set_tool_output_dir("masscan", None)
-    assert config.tool_output_dirs() == {}
+    assert config.output_root() is None
+    config.set_output_root("  /data/pentests  ")  # trimmed
+    assert config.output_root() == Path("/data/pentests")
+    config.set_output_root("")  # cleared -> back to default
+    assert config.output_root() is None
+    assert config.scan_dir("acme", 1, tool="nmap") == (
+        config.engagement_dir("acme") / "scans" / "nmap" / "1"
+    )
 
 
-def test_malformed_settings_ignored(tmp_path):
+def test_malformed_output_root_ignored(tmp_path):
     config = _config(tmp_path)
-    config.save_settings({"tool_output_dirs": {"nmap": 123, "ok": "/data/ok", "blank": ""}})
-    # Non-string and empty values are dropped; valid ones survive.
-    assert config.tool_output_dirs() == {"ok": "/data/ok"}
+    config.save_settings({"output_root": 123})
+    assert config.output_root() is None
