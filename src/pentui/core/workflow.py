@@ -128,8 +128,7 @@ class WorkflowDefinition(BaseModel):
                     raise ValueError(f"step {step.id!r} has 'foreach' but no 'input' query")
             if step.file_from is not None and step.file_from.step not in idset:
                 raise ValueError(
-                    f"step {step.id!r} file_from references unknown step "
-                    f"{step.file_from.step!r}"
+                    f"step {step.id!r} file_from references unknown step {step.file_from.step!r}"
                 )
         topological_order(self.steps)  # raises on cycle
         return self
@@ -435,16 +434,24 @@ class WorkflowEngine:
         scans = ScanRepository(self.conn)
         scan = scans.create(
             Scan(
-                project_id=self.project_id, tool=step.tool, profile=step.profile,
-                ran_as_root=use_sudo, step_run_id=self.step_runs[step.id].id,
+                project_id=self.project_id,
+                tool=step.tool,
+                profile=step.profile,
+                ran_as_root=use_sudo,
+                step_run_id=self.step_runs[step.id].id,
             )
         )
         assert scan.id is not None
         scan_dir = self.config.scan_dir(self.engagement.name, scan.id)
         try:
             runs = build_runs(
-                manifest, profile=profile, options=options, extra_args=step.extra_args,
-                targets=targets, scan_dir=str(scan_dir), sudo=use_sudo,
+                manifest,
+                profile=profile,
+                options=options,
+                extra_args=step.extra_args,
+                targets=targets,
+                scan_dir=str(scan_dir),
+                sudo=use_sudo,
             )
         except ExecutorError as exc:
             scan.status = ScanStatus.ERROR
@@ -468,6 +475,7 @@ class WorkflowEngine:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         exit_codes: list[int] = []
         with log_path.open("w", encoding="utf-8") as log:
+
             def on_line(line: str) -> None:
                 self._emit(step.id, "line", prefix + line)
                 log.write(line + "\n")
@@ -478,7 +486,8 @@ class WorkflowEngine:
                 self._emit(step.id, "line", f"{prefix}$ {preview(argv)}")
                 try:
                     result = await run_command(
-                        argv, on_line=on_line,
+                        argv,
+                        on_line=on_line,
                         stdin_data=self.sudo_password if use_sudo else None,
                     )
                 except ExecutorError as exc:
@@ -520,8 +529,11 @@ class WorkflowEngine:
         if parser is None:
             return
         ctx = ParseContext(
-            raw_stdout="", raw_stderr="", artifact_path=scan.artifact_path,
-            scan_id=scan.id or 0, project_id=self.project_id,
+            raw_stdout="",
+            raw_stderr="",
+            artifact_path=scan.artifact_path,
+            scan_id=scan.id or 0,
+            project_id=self.project_id,
         )
         summary = merge_scan_result(self.conn, self.project_id, scan.id, parser(ctx))
         self._emit(
@@ -562,9 +574,7 @@ class WorkflowEngine:
         if step.on_failure == "stop-branch":
             self._skip_descendants(step.id, "upstream step failed")
 
-    def _skip(
-        self, step: WorkflowStep, reason: str, *, skip_descendants: bool = False
-    ) -> None:
+    def _skip(self, step: WorkflowStep, reason: str, *, skip_descendants: bool = False) -> None:
         self._emit(step.id, "line", f"↷ skipped: {reason}")
         self._transition(step, StepState.SKIPPED, finished=True)
         if skip_descendants:

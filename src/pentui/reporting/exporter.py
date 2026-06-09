@@ -170,12 +170,16 @@ def render_json(data: ReportData) -> str:
         "targets": data.targets,
         "activity_window": {"start": data.date_start, "end": data.date_end},
         "hosts": [h.model_dump(mode="json") for h in data.hosts],
-        "findings": [f.model_dump(mode="json", exclude={"host_ip"}) | {"host_ip": f.host_ip}
-                     for f in data.findings],
+        "findings": [
+            f.model_dump(mode="json", exclude={"host_ip"}) | {"host_ip": f.host_ip}
+            for f in data.findings
+        ],
         "scans": [s.model_dump(mode="json") for s in data.scans],
         "workflow_runs": [
-            {"run": wr.run.model_dump(mode="json"),
-             "steps": [st.model_dump(mode="json") for st in wr.steps]}
+            {
+                "run": wr.run.model_dump(mode="json"),
+                "steps": [st.model_dump(mode="json") for st in wr.steps],
+            }
             for wr in data.workflow_runs
         ],
     }
@@ -186,19 +190,38 @@ def render_csv(data: ReportData) -> str:
     """Host:port:service inventory — one row per port (hosts without ports get one row)."""
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["ip", "hostname", "state", "port", "protocol",
-                     "port_state", "service", "product", "version"])
+    writer.writerow(
+        [
+            "ip",
+            "hostname",
+            "state",
+            "port",
+            "protocol",
+            "port_state",
+            "service",
+            "product",
+            "version",
+        ]
+    )
     for host in data.hosts:
         if not host.ports:
             writer.writerow([host.ip, host.hostname or "", host.state, "", "", "", "", "", ""])
             continue
         for port in host.ports:
             svc = port.service
-            writer.writerow([
-                host.ip, host.hostname or "", host.state,
-                port.number, port.protocol, port.state,
-                svc.name if svc else "", svc.product if svc else "", svc.version if svc else "",
-            ])
+            writer.writerow(
+                [
+                    host.ip,
+                    host.hostname or "",
+                    host.state,
+                    port.number,
+                    port.protocol,
+                    port.state,
+                    svc.name if svc else "",
+                    svc.product if svc else "",
+                    svc.version if svc else "",
+                ]
+            )
     return buf.getvalue()
 
 

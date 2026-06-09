@@ -19,12 +19,12 @@ class ParseContext:
 
     raw_stdout: str
     raw_stderr: str
-    artifact_path: str | None   # e.g. the nmap XML file, if the tool wrote one
+    artifact_path: str | None  # e.g. the nmap XML file, if the tool wrote one
     scan_id: int
     project_id: int
 
 
 class Parser(Protocol):
-    name: str                   # must match a manifest's output.parser
+    name: str  # must match a manifest's output.parser
 
     def parse(self, ctx: ParseContext) -> ScanResult: ...

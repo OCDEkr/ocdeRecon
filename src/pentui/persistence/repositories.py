@@ -151,8 +151,9 @@ class ScopeRuleRepository:
             "SELECT * FROM scope_rule WHERE project_id = ? ORDER BY id;", (project_id,)
         ).fetchall()
         return [
-            ScopeRule(id=r["id"], project_id=r["project_id"], value=r["value"],
-                      kind=ScopeKind(r["kind"]))
+            ScopeRule(
+                id=r["id"], project_id=r["project_id"], value=r["value"], kind=ScopeKind(r["kind"])
+            )
             for r in rows
         ]
 
@@ -161,8 +162,9 @@ class TargetRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
 
-    def create(self, project_id: int, value: str,
-               source: TargetSource = TargetSource.MANUAL) -> int:
+    def create(
+        self, project_id: int, value: str, source: TargetSource = TargetSource.MANUAL
+    ) -> int:
         cur = self.conn.execute(
             "INSERT INTO target (project_id, value, source) VALUES (?, ?, ?);",
             (project_id, value, source.value),
@@ -176,8 +178,13 @@ class TargetRepository:
             "SELECT * FROM target WHERE project_id = ? ORDER BY id;", (project_id,)
         ).fetchall()
         return [
-            Target(id=r["id"], project_id=r["project_id"], value=r["value"],
-                   source=TargetSource(r["source"]), added_at=r["added_at"])
+            Target(
+                id=r["id"],
+                project_id=r["project_id"],
+                value=r["value"],
+                source=TargetSource(r["source"]),
+                added_at=r["added_at"],
+            )
             for r in rows
         ]
 
@@ -211,8 +218,13 @@ class WorkflowRunRepository:
         cur = self.conn.execute(
             "INSERT INTO workflow_run (project_id, workflow_name, definition_json, "
             "status, unattended) VALUES (?, ?, ?, ?, ?);",
-            (run.project_id, run.workflow_name, run.definition_json,
-             run.status.value, int(run.unattended)),
+            (
+                run.project_id,
+                run.workflow_name,
+                run.definition_json,
+                run.status.value,
+                int(run.unattended),
+            ),
         )
         self.conn.commit()
         assert cur.lastrowid is not None
@@ -233,9 +245,13 @@ class WorkflowRunRepository:
         ).fetchall()
         return [
             WorkflowRun(
-                id=r["id"], project_id=r["project_id"], workflow_name=r["workflow_name"],
-                definition_json=r["definition_json"], status=WorkflowStatus(r["status"]),
-                unattended=bool(r["unattended"]), started_at=r["started_at"],
+                id=r["id"],
+                project_id=r["project_id"],
+                workflow_name=r["workflow_name"],
+                definition_json=r["definition_json"],
+                status=WorkflowStatus(r["status"]),
+                unattended=bool(r["unattended"]),
+                started_at=r["started_at"],
                 finished_at=r["finished_at"],
             )
             for r in rows
@@ -250,8 +266,14 @@ class StepRunRepository:
         cur = self.conn.execute(
             "INSERT INTO step_run (workflow_run_id, step_id, tool, scan_id, status, "
             "gate_state) VALUES (?, ?, ?, ?, ?, ?);",
-            (step.workflow_run_id, step.step_id, step.tool, step.scan_id,
-             step.status.value, step.gate_state.value),
+            (
+                step.workflow_run_id,
+                step.step_id,
+                step.tool,
+                step.scan_id,
+                step.status.value,
+                step.gate_state.value,
+            ),
         )
         self.conn.commit()
         assert cur.lastrowid is not None
@@ -262,8 +284,14 @@ class StepRunRepository:
         self.conn.execute(
             "UPDATE step_run SET scan_id = ?, status = ?, gate_state = ?, "
             "started_at = ?, finished_at = ? WHERE id = ?;",
-            (step.scan_id, step.status.value, step.gate_state.value,
-             _dt(step.started_at), _dt(step.finished_at), step.id),
+            (
+                step.scan_id,
+                step.status.value,
+                step.gate_state.value,
+                _dt(step.started_at),
+                _dt(step.finished_at),
+                step.id,
+            ),
         )
         self.conn.commit()
 
@@ -274,9 +302,14 @@ class StepRunRepository:
         ).fetchall()
         return [
             StepRun(
-                id=r["id"], workflow_run_id=r["workflow_run_id"], step_id=r["step_id"],
-                tool=r["tool"], scan_id=r["scan_id"], status=ScanStatus(r["status"]),
-                gate_state=GateState(r["gate_state"]), started_at=r["started_at"],
+                id=r["id"],
+                workflow_run_id=r["workflow_run_id"],
+                step_id=r["step_id"],
+                tool=r["tool"],
+                scan_id=r["scan_id"],
+                status=ScanStatus(r["status"]),
+                gate_state=GateState(r["gate_state"]),
+                started_at=r["started_at"],
                 finished_at=r["finished_at"],
             )
             for r in rows
@@ -368,8 +401,14 @@ class ServiceRepository:
         self.conn.execute(
             "INSERT INTO service (port_id, name, product, version, extrainfo, cpe) "
             "VALUES (?, ?, ?, ?, ?, ?);",
-            (port_id, service.name, service.product, service.version,
-             service.extrainfo, service.cpe),
+            (
+                port_id,
+                service.name,
+                service.product,
+                service.version,
+                service.extrainfo,
+                service.cpe,
+            ),
         )
         self.conn.commit()
 
@@ -435,5 +474,3 @@ class FindingRepository:
 def _dt(value: object) -> str | None:
     """Render a datetime (or None) as an ISO string for SQLite text storage."""
     return None if value is None else str(value)
-
-

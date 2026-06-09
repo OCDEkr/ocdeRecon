@@ -37,9 +37,7 @@ class WorkflowLaunchScreen(Screen[None]):
         ("q", "app.quit", "Quit"),
     ]
 
-    def __init__(
-        self, engagement: Engagement, registry: ToolRegistry, config: AppConfig
-    ) -> None:
+    def __init__(self, engagement: Engagement, registry: ToolRegistry, config: AppConfig) -> None:
         super().__init__()
         self.engagement = engagement
         self.registry = registry
@@ -73,8 +71,7 @@ class WorkflowLaunchScreen(Screen[None]):
             view.append(ListItem(Label(name), name=name))
         if not self.workflows.names():
             self.query_one("#detail", Static).update(
-                "No workflows found. Add YAML under workflows/ or "
-                "~/.config/pentui/workflows/."
+                "No workflows found. Add YAML under workflows/ or ~/.config/pentui/workflows/."
             )
 
     def _selected(self) -> WorkflowDefinition | None:
@@ -116,7 +113,10 @@ class WorkflowLaunchScreen(Screen[None]):
 
         self.app.push_screen(
             WorkflowMonitorScreen(
-                self.engagement, self.registry, self.config, wf,
+                self.engagement,
+                self.registry,
+                self.config,
+                wf,
                 unattended=self.query_one("#unattended", Checkbox).value,
                 is_root=os.geteuid() == 0,
             )

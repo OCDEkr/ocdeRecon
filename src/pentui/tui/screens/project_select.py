@@ -69,8 +69,9 @@ class ProjectSelectScreen(Screen[None]):
             yield Label("New engagement")
             yield Input(placeholder="name (letters, digits, - or _)", id="name", classes="field")
             yield Input(placeholder="client (optional)", id="client", classes="field")
-            yield Input(placeholder="in-scope, e.g. 10.0.0.0/24 app.example", id="includes",
-                        classes="field")
+            yield Input(
+                placeholder="in-scope, e.g. 10.0.0.0/24 app.example", id="includes", classes="field"
+            )
             yield Input(placeholder="excludes (optional)", id="excludes", classes="field")
             yield Input(placeholder="initial targets (optional)", id="targets", classes="field")
             yield Label("Run workflow on create (unattended, optional):")
@@ -202,9 +203,7 @@ class ProjectSelectScreen(Screen[None]):
         if kickoff is not None:
             self._launch_kickoff(engagement, kickoff, target_values)
 
-    def _launch_kickoff(
-        self, engagement: Engagement, name: str, targets: list[str]
-    ) -> None:
+    def _launch_kickoff(self, engagement: Engagement, name: str, targets: list[str]) -> None:
         """Push the chosen recon workflow (unattended) on top of the dashboard."""
         wf = self.workflows.get(name)
         if wf is None:
@@ -223,7 +222,11 @@ class ProjectSelectScreen(Screen[None]):
 
         self.app.push_screen(
             WorkflowMonitorScreen(
-                engagement, self.registry, self.config, wf,
-                unattended=True, is_root=os.geteuid() == 0,
+                engagement,
+                self.registry,
+                self.config,
+                wf,
+                unattended=True,
+                is_root=os.geteuid() == 0,
             )
         )

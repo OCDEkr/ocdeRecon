@@ -69,7 +69,12 @@ class PentuiApp(App[None]):
     async def _validate_sudo(password: str) -> bool:
         try:
             proc = await asyncio.create_subprocess_exec(
-                "sudo", "-S", "-k", "-p", "", "true",
+                "sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "true",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,

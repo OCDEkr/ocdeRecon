@@ -70,13 +70,17 @@ async def test_chain_feeds_one_tool_into_the_next(tmp_path):
     config, registry, eng = _setup(tmp_path)
     TargetRepository(eng.conn).create(eng.project_id, "10.0.0.1")
 
-    wf = _wf([
-        {"id": "discover", "tool": "fakenmap", "targets": {"from": "project"}},
-        {
-            "id": "shots", "tool": "echo", "after": ["discover"],
-            "input": {"from": "hosts", "where": {"port_open_in": [80]}, "as": "target_urls"},
-        },
-    ])
+    wf = _wf(
+        [
+            {"id": "discover", "tool": "fakenmap", "targets": {"from": "project"}},
+            {
+                "id": "shots",
+                "tool": "echo",
+                "after": ["discover"],
+                "input": {"from": "hosts", "where": {"port_open_in": [80]}, "as": "target_urls"},
+            },
+        ]
+    )
     engine = WorkflowEngine(eng, registry, config, unattended=True)
     run = await engine.run(wf)
 
@@ -137,15 +141,25 @@ def _fanout_setup(tmp_path: Path):
 
 async def test_per_subnet_fanout_then_batch_gowitness(tmp_path):
     config, registry, eng = _fanout_setup(tmp_path)
-    wf = WorkflowDefinition.model_validate({
-        "name": "fanout",
-        "steps": [
-            {"id": "scan", "tool": "fakenmap", "foreach": "subnet/24",
-             "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"}},
-            {"id": "shots", "tool": "fakeshot", "after": ["scan"],
-             "file_from": {"step": "scan", "flag": "-f"}},
-        ],
-    })
+    wf = WorkflowDefinition.model_validate(
+        {
+            "name": "fanout",
+            "steps": [
+                {
+                    "id": "scan",
+                    "tool": "fakenmap",
+                    "foreach": "subnet/24",
+                    "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"},
+                },
+                {
+                    "id": "shots",
+                    "tool": "fakeshot",
+                    "after": ["scan"],
+                    "file_from": {"step": "scan", "flag": "-f"},
+                },
+            ],
+        }
+    )
     run = await WorkflowEngine(eng, registry, config, unattended=True).run(wf)
 
     assert engine_states_done(eng, run)
@@ -203,14 +217,20 @@ def _conc_setup(tmp_path: Path, *, subnets: int):
 
 def _conc_wf(*, max_parallel: int | None = None) -> WorkflowDefinition:
     defaults = {"max_parallel": max_parallel} if max_parallel is not None else {}
-    return WorkflowDefinition.model_validate({
-        "name": "conc",
-        "defaults": defaults,
-        "steps": [
-            {"id": "scan", "tool": "fakeconc", "foreach": "subnet/24",
-             "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"}},
-        ],
-    })
+    return WorkflowDefinition.model_validate(
+        {
+            "name": "conc",
+            "defaults": defaults,
+            "steps": [
+                {
+                    "id": "scan",
+                    "tool": "fakeconc",
+                    "foreach": "subnet/24",
+                    "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"},
+                },
+            ],
+        }
+    )
 
 
 def _peak(peak_dir: Path) -> int:
@@ -242,12 +262,19 @@ async def test_declined_gate_skips_step_and_descendants(tmp_path):
     config, registry, eng = _setup(tmp_path)
     TargetRepository(eng.conn).create(eng.project_id, "10.0.0.1")
 
-    wf = _wf([
-        {"id": "first", "tool": "echo", "targets": {"from": "project"}},
-        {"id": "gated", "tool": "echo", "after": ["first"], "gate": True,
-         "targets": {"from": "project"}},
-        {"id": "last", "tool": "echo", "after": ["gated"], "targets": {"from": "project"}},
-    ])
+    wf = _wf(
+        [
+            {"id": "first", "tool": "echo", "targets": {"from": "project"}},
+            {
+                "id": "gated",
+                "tool": "echo",
+                "after": ["first"],
+                "gate": True,
+                "targets": {"from": "project"},
+            },
+            {"id": "last", "tool": "echo", "after": ["gated"], "targets": {"from": "project"}},
+        ]
+    )
 
     async def deny(step: WorkflowStep) -> bool:
         return False

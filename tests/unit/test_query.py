@@ -43,8 +43,9 @@ def conn(tmp_path):
     hosts.upsert(1, Host(ip="10.0.0.3", state="down"))
 
     FindingRepository(conn).create(
-        Finding(project_id=1, host_id=b, source_tool="nmap",
-                severity=Severity.HIGH, title="smb vuln")
+        Finding(
+            project_id=1, host_id=b, source_tool="nmap", severity=Severity.HIGH, title="smb vuln"
+        )
     )
     return conn
 

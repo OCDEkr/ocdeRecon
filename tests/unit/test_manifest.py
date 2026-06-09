@@ -47,9 +47,7 @@ def test_invalid_yaml_raises(tmp_path):
 
 def test_choice_without_choices_rejected(tmp_path):
     bad = tmp_path / "bad.yaml"
-    bad.write_text(
-        "name: t\nbinary: t\noptions:\n  - {flag: '-x', label: X, type: choice}\n"
-    )
+    bad.write_text("name: t\nbinary: t\noptions:\n  - {flag: '-x', label: X, type: choice}\n")
     with pytest.raises(ManifestError):
         load_manifest(bad)
 

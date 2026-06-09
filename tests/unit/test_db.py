@@ -14,13 +14,21 @@ def test_init_db_creates_schema(tmp_path):
 
     tables = {
         row["name"]
-        for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table';"
-        ).fetchall()
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()
     }
     expected = {
-        "project", "scope_rule", "target", "scan", "host", "port", "service",
-        "finding", "workflow_run", "step_run", "audit_log", "schema_version",
+        "project",
+        "scope_rule",
+        "target",
+        "scan",
+        "host",
+        "port",
+        "service",
+        "finding",
+        "workflow_run",
+        "step_run",
+        "audit_log",
+        "schema_version",
     }
     assert expected <= tables
 

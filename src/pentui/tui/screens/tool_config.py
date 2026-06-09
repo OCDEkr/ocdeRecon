@@ -93,8 +93,10 @@ class ToolConfigScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         if self.manifest is None:
-            yield Static("No tool manifests found. Add one under tools/ or "
-                         "~/.config/pentui/tools/.", id="cmd")
+            yield Static(
+                "No tool manifests found. Add one under tools/ or ~/.config/pentui/tools/.",
+                id="cmd",
+            )
             yield Footer()
             return
         tool_opts = [(name, name) for name in self.registry.names()]
@@ -277,8 +279,13 @@ class ToolConfigScreen(Screen[None]):
         assert scan.id is not None
         scan_dir = str(self.config.scan_dir(self.engagement.name, scan.id))
         runs = build_runs(
-            self.manifest, profile=profile, options=options,
-            extra_args=self._extra_args(), targets=targets, scan_dir=scan_dir, sudo=use_sudo,
+            self.manifest,
+            profile=profile,
+            options=options,
+            extra_args=self._extra_args(),
+            targets=targets,
+            scan_dir=scan_dir,
+            sudo=use_sudo,
         )
         note = f"   (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
         scan.command_str = preview(runs[0][1]) + note
@@ -293,16 +300,18 @@ class ToolConfigScreen(Screen[None]):
 
         self.app.push_screen(
             ScanMonitorScreen(
-                self.engagement, self.manifest, scan, scan_dir, runs,
+                self.engagement,
+                self.manifest,
+                scan,
+                scan_dir,
+                runs,
                 sudo_password=sudo_password,
             )
         )
 
     @on(Button.Pressed, "#load_targets")
     def _load_targets(self) -> None:
-        saved = TargetRepository(self.engagement.conn).list_for_project(
-            self.engagement.project_id
-        )
+        saved = TargetRepository(self.engagement.conn).list_for_project(self.engagement.project_id)
         if not saved:
             self.notify("No saved targets for this engagement.", severity="warning")
             return
@@ -374,7 +383,4 @@ class ToolConfigScreen(Screen[None]):
         return True
 
     def _audit(self, action: str, detail: str) -> None:
-        AuditLogRepository(self.engagement.conn).log(
-            self.engagement.project_id, action, detail
-        )
-
+        AuditLogRepository(self.engagement.conn).log(self.engagement.project_id, action, detail)

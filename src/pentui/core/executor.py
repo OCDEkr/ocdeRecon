@@ -204,14 +204,24 @@ def build_runs(
         runs: list[tuple[str, list[str]]] = []
         for path in batch:
             argv = build_argv(
-                manifest, profile=profile, options={**options, option.flag: str(path)},
-                extra_args=extra_args, targets=targets, scan_dir=scan_dir, sudo=sudo,
+                manifest,
+                profile=profile,
+                options={**options, option.flag: str(path)},
+                extra_args=extra_args,
+                targets=targets,
+                scan_dir=scan_dir,
+                sudo=sudo,
             )
             runs.append((path.name, argv))
         return runs
     argv = build_argv(
-        manifest, profile=profile, options=options, extra_args=extra_args,
-        targets=targets, scan_dir=scan_dir, sudo=sudo,
+        manifest,
+        profile=profile,
+        options=options,
+        extra_args=extra_args,
+        targets=targets,
+        scan_dir=scan_dir,
+        sudo=sudo,
     )
     return [("", argv)]
 

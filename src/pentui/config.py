@@ -76,8 +76,12 @@ class AppConfig:
 
     def ensure_dirs(self) -> None:
         """Create the base data/config directories if missing."""
-        for path in (self.engagements_dir, self.user_tools_dir,
-                     self.user_parsers_dir, self.user_workflows_dir):
+        for path in (
+            self.engagements_dir,
+            self.user_tools_dir,
+            self.user_parsers_dir,
+            self.user_workflows_dir,
+        ):
             path.mkdir(parents=True, exist_ok=True)
 
     @property

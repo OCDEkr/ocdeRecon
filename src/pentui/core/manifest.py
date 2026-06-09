@@ -21,14 +21,14 @@ class ManifestError(Exception):
 
 
 class OptionType(StrEnum):
-    BOOL = "bool"      # flag present/absent
-    VALUE = "value"    # flag + free-text value
+    BOOL = "bool"  # flag present/absent
+    VALUE = "value"  # flag + free-text value
     CHOICE = "choice"  # flag + one of `choices`
 
 
 class TargetMode(StrEnum):
     APPEND = "append"  # targets appended as trailing argv tokens
-    FLAG = "flag"      # targets written to a file passed via `flag`
+    FLAG = "flag"  # targets written to a file passed via `flag`
 
 
 class ToolOption(BaseModel):

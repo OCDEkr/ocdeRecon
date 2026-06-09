@@ -124,7 +124,9 @@ class ScanMonitorScreen(Screen[None]):
                     self._emit(f"=== [{index + 1}/{len(self.runs)}] {label} ===")
                 try:
                     result = await run_command(
-                        argv, on_line=self._emit, on_start=self._on_proc,
+                        argv,
+                        on_line=self._emit,
+                        on_start=self._on_proc,
                         stdin_data=self.sudo_password,
                     )
                 except ExecutorError as exc:

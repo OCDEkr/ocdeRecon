@@ -25,8 +25,11 @@ def _file_input_manifest() -> ToolManifest:
     return ToolManifest(
         name="batch",
         binary="echo",
-        options=[ToolOption(flag="-f", label="file", type=OptionType.VALUE,
-                            file_input=True, file_glob="*.xml")],
+        options=[
+            ToolOption(
+                flag="-f", label="file", type=OptionType.VALUE, file_input=True, file_glob="*.xml"
+            )
+        ],
     )
 
 
@@ -83,18 +86,21 @@ def test_build_argv_option_types(nmap, tmp_path):
         targets=["scanme.example"],
         scan_dir=tmp_path,
     )
-    assert "-sV" in argv          # bool enabled
-    assert "-sS" not in argv      # bool disabled
-    assert argv[argv.index("-p"):argv.index("-p") + 2] == ["-p", "22,80"]  # value, separate
-    assert "-T5" in argv          # choice, attached
+    assert "-sV" in argv  # bool enabled
+    assert "-sS" not in argv  # bool disabled
+    assert argv[argv.index("-p") : argv.index("-p") + 2] == ["-p", "22,80"]  # value, separate
+    assert "-T5" in argv  # choice, attached
 
 
 def test_build_argv_extra_args(nmap, tmp_path):
     argv = build_argv(
-        nmap, options={"-sV": True}, extra_args=["--top-ports", "100"],
-        targets=["x"], scan_dir=tmp_path,
+        nmap,
+        options={"-sV": True},
+        extra_args=["--top-ports", "100"],
+        targets=["x"],
+        scan_dir=tmp_path,
     )
-    assert argv[argv.index("--top-ports"):argv.index("--top-ports") + 2] == ["--top-ports", "100"]
+    assert argv[argv.index("--top-ports") : argv.index("--top-ports") + 2] == ["--top-ports", "100"]
     # extra args land after options but before the artifact flag and targets
     assert argv.index("-sV") < argv.index("--top-ports") < argv.index("-oX")
     assert argv[-1] == "x"
@@ -123,8 +129,13 @@ def test_gowitness_v3_nmap_command():
         g,
         profile=g.profile("Scan from nmap XML"),
         options={
-            "-f": "nmap.xml", "--write-screenshots": True, "--log-scan-errors": True,
-            "--open-only": True, "--write-db": True, "--threads": "16", "--timeout": "15",
+            "-f": "nmap.xml",
+            "--write-screenshots": True,
+            "--log-scan-errors": True,
+            "--open-only": True,
+            "--write-db": True,
+            "--threads": "16",
+            "--timeout": "15",
         },
     )
     assert argv[:3] == ["gowitness", "scan", "nmap"]

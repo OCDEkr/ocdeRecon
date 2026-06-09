@@ -57,9 +57,7 @@ class QuerySpec(BaseModel):
 def _open_ports(host: Host, numbers: list[int]) -> list[int]:
     wanted = set(numbers)
     return [
-        p.number
-        for p in host.ports
-        if p.state == "open" and (not wanted or p.number in wanted)
+        p.number for p in host.ports if p.state == "open" and (not wanted or p.number in wanted)
     ]
 
 

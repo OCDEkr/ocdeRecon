@@ -68,9 +68,7 @@ class ConfirmModal(ModalScreen[bool]):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(
-        self, title: str, message: str, *, confirm_label: str = "Delete"
-    ) -> None:
+    def __init__(self, title: str, message: str, *, confirm_label: str = "Delete") -> None:
         super().__init__()
         self._title = title
         self._message = message

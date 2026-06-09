@@ -19,12 +19,14 @@ def _wf(steps: list[dict]) -> WorkflowDefinition:
 
 
 def test_topological_order_respects_dependencies():
-    wf = _wf([
-        {"id": "a", "tool": "x"},
-        {"id": "b", "tool": "x", "after": ["a"]},
-        {"id": "c", "tool": "x", "after": ["a"]},
-        {"id": "d", "tool": "x", "after": ["b", "c"]},
-    ])
+    wf = _wf(
+        [
+            {"id": "a", "tool": "x"},
+            {"id": "b", "tool": "x", "after": ["a"]},
+            {"id": "c", "tool": "x", "after": ["a"]},
+            {"id": "d", "tool": "x", "after": ["b", "c"]},
+        ]
+    )
     order = topological_order(wf.steps)
     assert order.index("a") < order.index("b") < order.index("d")
     assert order.index("a") < order.index("c") < order.index("d")
@@ -33,10 +35,13 @@ def test_topological_order_respects_dependencies():
 def test_cycle_is_rejected():
     with pytest.raises(WorkflowError):
         WorkflowDefinition.model_validate(
-            {"name": "t", "steps": [
-                {"id": "a", "tool": "x", "after": ["b"]},
-                {"id": "b", "tool": "x", "after": ["a"]},
-            ]}
+            {
+                "name": "t",
+                "steps": [
+                    {"id": "a", "tool": "x", "after": ["b"]},
+                    {"id": "b", "tool": "x", "after": ["a"]},
+                ],
+            }
         )
 
 

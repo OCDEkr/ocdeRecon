@@ -12,7 +12,7 @@ from pentui.persistence.repositories import HostRepository
 
 from ._helpers import start_engagement
 
-FAKE_NMAP = '''#!/usr/bin/env python3
+FAKE_NMAP = """#!/usr/bin/env python3
 import sys
 out = None
 for i, a in enumerate(sys.argv):
@@ -27,7 +27,7 @@ if out:
         \'</port></ports></host></nmaprun>\'
     )
 print("fake nmap done")
-'''
+"""
 
 
 def _make_config(tmp_path: Path) -> AppConfig:

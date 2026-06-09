@@ -53,8 +53,13 @@ def conn(tmp_path):
         WorkflowRun(project_id=pid, workflow_name="web-recon", status=WorkflowStatus.DONE)
     )
     StepRunRepository(conn).create(
-        StepRun(workflow_run_id=run.id, step_id="discover", tool="nmap",
-                status=ScanStatus.DONE, gate_state=GateState.AUTO)
+        StepRun(
+            workflow_run_id=run.id,
+            step_id="discover",
+            tool="nmap",
+            status=ScanStatus.DONE,
+            gate_state=GateState.AUTO,
+        )
     )
     return conn
 

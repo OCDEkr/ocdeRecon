@@ -49,9 +49,7 @@ class DashboardScreen(Screen[None]):
         ("q", "app.quit", "Quit"),
     ]
 
-    def __init__(
-        self, engagement: Engagement, registry: ToolRegistry, config: AppConfig
-    ) -> None:
+    def __init__(self, engagement: Engagement, registry: ToolRegistry, config: AppConfig) -> None:
         super().__init__()
         self.engagement = engagement
         self.registry = registry
@@ -101,10 +99,7 @@ class DashboardScreen(Screen[None]):
         hosts = HostRepository(conn).list_for_project(pid)
         ports_repo = PortRepository(conn)
         open_ports = sum(
-            1
-            for h in hosts
-            for p in ports_repo.list_for_host(h.id or 0)
-            if p.state == "open"
+            1 for h in hosts for p in ports_repo.list_for_host(h.id or 0) if p.state == "open"
         )
         findings = len(FindingRepository(conn).list_for_project(pid))
 
@@ -126,16 +121,12 @@ class DashboardScreen(Screen[None]):
     def action_new_scan(self) -> None:
         from pentui.tui.screens.tool_config import ToolConfigScreen
 
-        self.app.push_screen(
-            ToolConfigScreen(self.registry, self.engagement, self.config)
-        )
+        self.app.push_screen(ToolConfigScreen(self.registry, self.engagement, self.config))
 
     def action_workflows(self) -> None:
         from pentui.tui.screens.workflow_launch import WorkflowLaunchScreen
 
-        self.app.push_screen(
-            WorkflowLaunchScreen(self.engagement, self.registry, self.config)
-        )
+        self.app.push_screen(WorkflowLaunchScreen(self.engagement, self.registry, self.config))
 
     def action_results(self) -> None:
         from pentui.tui.screens.results import ResultsScreen

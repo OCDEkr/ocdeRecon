@@ -15,8 +15,15 @@ def test_packaged_registry_has_nmap():
 def test_packaged_tools_all_load():
     registry = build_registry()
     expected = {
-        "nmap", "gowitness", "nxc", "responder", "ntlmrelayx", "mitm6", "nessus",
-        "masscan", "nslookup",
+        "nmap",
+        "gowitness",
+        "nxc",
+        "responder",
+        "ntlmrelayx",
+        "mitm6",
+        "nessus",
+        "masscan",
+        "nslookup",
     }
     assert expected <= set(registry.names())
     assert registry.errors == []
@@ -28,9 +35,7 @@ def test_packaged_tools_all_load():
 
 def test_user_dir_overrides_and_bad_manifest_recorded(tmp_path):
     # A user manifest that overrides nmap's description.
-    (tmp_path / "nmap.yaml").write_text(
-        "name: nmap\nbinary: nmap\ndescription: custom\n"
-    )
+    (tmp_path / "nmap.yaml").write_text("name: nmap\nbinary: nmap\ndescription: custom\n")
     # A broken manifest that must be skipped, not fatal.
     (tmp_path / "broken.yaml").write_text("options: [oops]\n")
 

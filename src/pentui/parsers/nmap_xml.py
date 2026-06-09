@@ -99,9 +99,7 @@ def parse(ctx: ParseContext) -> ScanResult:
                     service=_service(port_el),
                 )
             )
-            findings.extend(
-                _script_findings(port_el, ip, port_label=f"{portid}/{protocol}")
-            )
+            findings.extend(_script_findings(port_el, ip, port_label=f"{portid}/{protocol}"))
         hosts.append(host)
 
         hostscript = host_el.find("hostscript")

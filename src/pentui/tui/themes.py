@@ -33,16 +33,16 @@ PENTUI = Theme(
 # Okabe-Ito colour-blind-safe palette.
 PENTUI_CB = Theme(
     name=COLORBLIND_THEME,
-    primary="#0072B2",   # blue
+    primary="#0072B2",  # blue
     secondary="#56B4E9",  # sky blue
-    accent="#E69F00",    # orange
+    accent="#E69F00",  # orange
     foreground="#000000",
     background="#ffffff",
     surface="#f0f0f0",
     panel="#e0e0e0",
-    success="#009E73",   # bluish green
-    warning="#E69F00",   # orange
-    error="#D55E00",     # vermillion
+    success="#009E73",  # bluish green
+    warning="#E69F00",  # orange
+    error="#D55E00",  # vermillion
     dark=False,
 )
 

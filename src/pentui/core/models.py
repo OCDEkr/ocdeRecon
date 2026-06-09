@@ -33,10 +33,10 @@ class WorkflowStatus(StrEnum):
 
 
 class GateState(StrEnum):
-    AUTO = "auto"          # ran without a gate
-    PENDING = "pending"    # waiting for operator approval
+    AUTO = "auto"  # ran without a gate
+    PENDING = "pending"  # waiting for operator approval
     APPROVED = "approved"  # operator approved a gated step
-    SKIPPED = "skipped"    # branch skipped (failure or out-of-scope)
+    SKIPPED = "skipped"  # branch skipped (failure or out-of-scope)
 
 
 class ScopeKind(StrEnum):
@@ -47,7 +47,7 @@ class ScopeKind(StrEnum):
 class TargetSource(StrEnum):
     MANUAL = "manual"
     FILE = "file"
-    CHAINED = "chained"   # produced by an upstream workflow step
+    CHAINED = "chained"  # produced by an upstream workflow step
     PROJECT = "project"
 
 
@@ -74,7 +74,7 @@ class Project(BaseModel):
 class ScopeRule(BaseModel):
     id: int | None = None
     project_id: int
-    value: str               # CIDR or single host/IP
+    value: str  # CIDR or single host/IP
     kind: ScopeKind
 
 
@@ -103,7 +103,7 @@ class Scan(BaseModel):
     finished_at: datetime | None = None
     raw_output_path: str | None = None
     artifact_path: str | None = None
-    step_run_id: int | None = None   # set when produced by a workflow step
+    step_run_id: int | None = None  # set when produced by a workflow step
 
 
 class Service(BaseModel):
@@ -176,7 +176,7 @@ class WorkflowRun(BaseModel):
 class StepRun(BaseModel):
     id: int | None = None
     workflow_run_id: int
-    step_id: str            # the step's id within the workflow definition
+    step_id: str  # the step's id within the workflow definition
     tool: str
     scan_id: int | None = None
     status: ScanStatus = ScanStatus.QUEUED

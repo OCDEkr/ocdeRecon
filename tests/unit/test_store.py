@@ -42,9 +42,9 @@ def test_merge_populates_unified_model(tmp_path):
 
     summary = merge_scan_result(conn, project_id, scan_id=None, result=_result())
     assert summary.hosts == 3
-    assert summary.open_ports == 3   # 22, 443 (.1) + 80 (.2); 8080 is closed
-    assert summary.services == 3     # ssh, https, http
-    assert summary.findings == 2     # ssh-hostkey + smb-os-discovery
+    assert summary.open_ports == 3  # 22, 443 (.1) + 80 (.2); 8080 is closed
+    assert summary.services == 3  # ssh, https, http
+    assert summary.findings == 2  # ssh-hostkey + smb-os-discovery
 
     hosts = {h.ip: h for h in HostRepository(conn).list_for_project(project_id)}
     gw = hosts["10.0.0.1"]
