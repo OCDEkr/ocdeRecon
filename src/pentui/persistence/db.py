@@ -143,6 +143,11 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE host ADD COLUMN smb_signing TEXT;
     """,
+    # ---- v3: domain-controller flag per host (DC discovery) -----------------
+    # NULL = unknown/not checked. 1 = identified domain controller (answers LDAP).
+    """
+    ALTER TABLE host ADD COLUMN is_dc INTEGER;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

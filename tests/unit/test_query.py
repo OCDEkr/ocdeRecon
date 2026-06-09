@@ -96,6 +96,13 @@ def test_smb_signing_in_selects_relay_targets(conn):
     ]
 
 
+def test_is_dc_selects_domain_controllers(conn):
+    hosts = HostRepository(conn)
+    hosts.upsert(1, Host(ip="10.0.0.20", hostname="dc01", is_dc=True))
+    hosts.upsert(1, Host(ip="10.0.0.21", is_dc=None))  # unknown, not a DC
+    assert run_query(conn, 1, _q(is_dc=True, as_=Materializer.IP_LIST)) == ["10.0.0.20"]
+
+
 def test_empty_where_returns_all_as_targets(conn):
     # hostname-or-ip for every host, deduped, in ip order
     assert run_query(conn, 1, _q()) == ["web1", "10.0.0.2", "10.0.0.3"]

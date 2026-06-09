@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from pentui.core.models import ScanResult
-from pentui.parsers import nmap_xml, runfinger
+from pentui.parsers import nmap_xml, nxc_ldap, runfinger
 from pentui.parsers.base import ParseContext
 
 ParseFn = Callable[[ParseContext], ScanResult]
@@ -17,6 +17,7 @@ ParseFn = Callable[[ParseContext], ScanResult]
 _PARSERS: dict[str, ParseFn] = {
     nmap_xml.name: nmap_xml.parse,
     runfinger.name: runfinger.parse,
+    nxc_ldap.name: nxc_ldap.parse,
 }
 
 
