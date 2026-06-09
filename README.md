@@ -26,14 +26,11 @@ themes (F2), tool-availability hints, and an audit-log viewer. Deferred to futur
 work (`PROJECT.md` §14): parallel step execution, SQLCipher encryption, PyInstaller
 packaging, scheduled runs.
 
-Workflows can be authored two ways: hand-written YAML under `workflows/` (or
-`~/.config/pentui/workflows/`), or **built interactively** in the app — press
-`b` on the Workflows screen to chain tools (pick a tool + profile, choose what
-each step feeds on, mark gates) and save a reusable workflow. Each step shows a
-**live command preview** and takes an **extra-args** field, so you're not limited
-to profiles — you see and tweak the exact command that will run. Adding a manifest
-under
-`tools/` makes the tool show up everywhere automatically. On the scan screen you
+Workflows are authored as **declarative YAML** (bundled under
+`src/pentui/workflows/`, or your own in `~/.config/pentui/workflows/`) and
+launched from the Workflows screen. Adding a manifest under
+`src/pentui/tools/` (or the user dir) makes the tool show up everywhere
+automatically. On the scan screen you
 can **save a configured scan as a named profile** (written to
 `~/.config/pentui/tools/`, merged with the tool's existing profiles). Pointing a
 file-input option (e.g. gowitness `-f`) at a **directory** runs the tool once per

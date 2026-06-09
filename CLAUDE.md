@@ -13,12 +13,11 @@ live output and scope guardrail; results parsed into the unified model, persiste
 and browsed; a **workflow engine** that chains tools as a DAG (query handoff,
 approval gates, unattended mode); **report export** to Markdown/HTML/JSON/CSV; and
 polish (blue/white + colour-blind-safe themes, tool-availability hints, audit-log
-viewer). Workflows can be **built interactively in the TUI** (chain tools without
-writing YAML) and saved as YAML, in addition to the packaged templates; each step
-shows a live command preview and takes free-form extra args (not just profiles).
-Every
-screen that lists tools is driven by the registry, so adding a manifest makes the
-tool available in manual scans, the builder, and workflows with no code change.
+viewer). Workflows are authored as **declarative YAML** (packaged under
+`src/pentui/workflows/` or user `~/.config/pentui/workflows/`) and launched/
+monitored from the TUI.
+Every screen that lists tools is driven by the registry, so adding a manifest
+makes the tool available in manual scans and workflows with no code change.
 A configured scan (profile + options + extra args) can be **saved as a named
 profile** from the scan screen — written as a user-manifest override under
 `~/.config/pentui/tools/` (merged with the tool's existing profiles) and the

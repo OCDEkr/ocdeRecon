@@ -171,64 +171,6 @@ def load_workflow(path: str | Path) -> WorkflowDefinition:
         raise WorkflowError(f"{path}: invalid workflow:\n{exc}") from exc
 
 
-def save_workflow(wf: WorkflowDefinition, path: str | Path) -> Path:
-    """Serialize a workflow to YAML that ``load_workflow`` round-trips.
-
-    Emits only non-default fields so the file stays readable.
-    """
-    data: dict[str, object] = {"name": wf.name}
-    if wf.description:
-        data["description"] = wf.description
-    if not wf.defaults.gates:
-        data["defaults"] = {"gates": False}
-
-    steps: list[dict[str, object]] = []
-    for step in wf.steps:
-        entry: dict[str, object] = {"id": step.id, "tool": step.tool}
-        if step.profile:
-            entry["profile"] = step.profile
-        if step.options:
-            entry["options"] = dict(step.options)
-        if step.extra_args:
-            entry["extra_args"] = list(step.extra_args)
-        if step.after:
-            entry["after"] = list(step.after)
-        if step.targets is not None:
-            entry["targets"] = {"from": step.targets.from_}
-        if step.foreach is not None:
-            entry["foreach"] = step.foreach
-        if step.file_from is not None:
-            entry["file_from"] = {"step": step.file_from.step, "flag": step.file_from.flag}
-        if step.input is not None:
-            query: dict[str, object] = {"from": step.input.from_, "as": step.input.as_.value}
-            where: dict[str, object] = {}
-            w = step.input.where
-            if w.host_state:
-                where["host_state"] = w.host_state
-            if w.port_open_in:
-                where["port_open_in"] = list(w.port_open_in)
-            if w.service_name_in:
-                where["service_name_in"] = list(w.service_name_in)
-            if w.has_finding_severity is not None:
-                where["has_finding_severity"] = w.has_finding_severity.value
-            if w.hostname_matches:
-                where["hostname_matches"] = w.hostname_matches
-            if where:
-                query["where"] = where
-            entry["input"] = query
-        if step.gate:
-            entry["gate"] = True
-        if step.on_failure != "stop-branch":
-            entry["on_failure"] = step.on_failure
-        steps.append(entry)
-    data["steps"] = steps
-
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    return path
-
-
 #: Packaged workflows ship inside the package (src/pentui/workflows).
 PACKAGED_WORKFLOWS_DIR = Path(__file__).resolve().parents[1] / "workflows"
 

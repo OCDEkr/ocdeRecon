@@ -42,7 +42,7 @@ is currently `nmapTUI`.
 | Workflow shape | **Branching DAG** (fan-out + parallel steps) | Matches real recon trees (one scan feeds several tools). |
 | Data handoff | **Query the unified model** (e.g. "hosts with open 80/443 → gowitness") | Tool-agnostic; any upstream tool that fills the model can feed any downstream tool. |
 | Automation level | **Auto by default with optional gates**; a **per-run "unattended" flag** suppresses gates for that session | Unattended speed when wanted, approval checkpoints when needed. |
-| Workflow authoring | **Declarative YAML + TUI builder** | Shareable/versionable templates, plus interactive assembly. |
+| Workflow authoring | **Declarative YAML** (launched/monitored from the TUI) | Shareable/versionable templates. (An interactive TUI builder was prototyped and removed in favour of YAML.) |
 | Language / TUI | **Python 3.11+ with [Textual](https://textual.textualize.io/)** | Fast iteration; pentesters know Python; rich widgets. |
 | Tool extensibility | **Declarative YAML manifests** | Add a simple tool = drop in a file, no recompile. |
 | Output parsing | **Manifest names a parser; parsers are Python plugins** | Simple tools need only a manifest; complex output gets a small parser. |
@@ -66,7 +66,7 @@ tool-to-tool handoff possible.
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ TUI (Textual)                                                      │
-│  Project select · Dashboard · Tool config · Workflow builder ·     │
+│  Project select · Dashboard · Tool config · Workflow launch ·      │
 │  Workflow/scan monitor · Results browser · Report export           │
 └───────────────┬────────────────────────────────────────────────────┘
                 │ calls
@@ -136,7 +136,7 @@ nmapTUI/
         project_select.py
         dashboard.py
         tool_config.py       # profile picker + options form + live command preview
-        workflow_builder.py  # assemble/launch workflows (DAG)
+        workflow_launch.py   # pick a YAML workflow + unattended toggle, launch
         workflow_monitor.py  # DAG view: per-step status, gate approvals, live output
         results.py           # host tree → ports → services; findings
         report.py            # export wizard
@@ -404,8 +404,8 @@ targets are validated the same way before use.
    finding counts; launch point for scans, workflows, and reports.
 3. **Tool config** — pick tool → profile → optional manual form, with a **live
    command preview** and target source (manual / file / project / prior results).
-4. **Workflow builder** — assemble a DAG from steps (tool + profile + input
-   query + gate), or load a YAML template; set the **unattended** toggle; launch.
+4. **Workflow launch** — pick a YAML workflow (bundled or user-supplied); set the
+   **unattended** toggle; launch.
 5. **Workflow / scan monitor** — DAG view with per-step status; **approve gated
    steps** here; live streaming output per step (tabs); cancel/resume.
 6. **Results browser** — host tree → ports → services; findings; filter/search;
@@ -541,7 +541,7 @@ can be prototyped as soon as Phase 2 is done).
 - **Phase 3 — Engagements & safety:** project/target management, scope
   enforcement, audit log.
 - **Phase 4 — Orchestration ★:** `query.py` (data handoff), `workflow.py` DAG
-  runner, gates + unattended flag, workflow builder + monitor screens. Prove with
+  runner, gates + unattended flag, workflow launch + monitor screens. Prove with
   the `nmap → second tool` chain.
 - **Phase 5 — Reporting:** Markdown/HTML/JSON/CSV exporters (incl. workflow runs).
 - **Phase 6 — Polish:** more tools by manifest, concurrency/queue UX, themes

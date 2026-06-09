@@ -33,7 +33,6 @@ class WorkflowLaunchScreen(Screen[None]):
     """
 
     BINDINGS = [
-        ("b", "build", "Build new"),
         ("escape", "app.pop_screen", "Back"),
         ("q", "app.quit", "Quit"),
     ]
@@ -49,7 +48,7 @@ class WorkflowLaunchScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Label("Workflows (Enter to select, b to build a new one):")
+        yield Label("Workflows (Enter to select and launch):")
         yield ListView(id="workflows")
         yield Static("Select a workflow.", id="detail")
         with Horizontal(id="controls"):
@@ -61,7 +60,7 @@ class WorkflowLaunchScreen(Screen[None]):
         self._refresh()
 
     def on_screen_resume(self) -> None:
-        # Pick up workflows created in the builder this session.
+        # Pick up workflow files added since the screen was opened.
         self._refresh()
 
     def _refresh(self) -> None:
@@ -74,7 +73,8 @@ class WorkflowLaunchScreen(Screen[None]):
             view.append(ListItem(Label(name), name=name))
         if not self.workflows.names():
             self.query_one("#detail", Static).update(
-                "No workflows yet — press [b]b[/b] to build one."
+                "No workflows found. Add YAML under workflows/ or "
+                "~/.config/pentui/workflows/."
             )
 
     def _selected(self) -> WorkflowDefinition | None:
@@ -103,13 +103,6 @@ class WorkflowLaunchScreen(Screen[None]):
                 f"• {step.id}: {step.tool} ({step.profile or 'manual'}){after}{gate}{missing}"
             )
         self.query_one("#detail", Static).update("\n".join(lines))
-
-    def action_build(self) -> None:
-        from pentui.tui.screens.workflow_builder import WorkflowBuilderScreen
-
-        self.app.push_screen(
-            WorkflowBuilderScreen(self.engagement, self.registry, self.config)
-        )
 
     @on(Button.Pressed, "#launch")
     def _launch(self) -> None:
