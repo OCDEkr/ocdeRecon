@@ -20,6 +20,15 @@ class ManifestError(Exception):
     """Raised when a manifest file is malformed or fails validation."""
 
 
+class ToolKind(StrEnum):
+    """How a tool is executed. ``process`` runs an argv subprocess (every shipped
+    tool today); ``rest`` drives an HTTP API instead of a command (e.g. Nessus).
+    The workflow engine dispatches on this via ``pentui.core.runner``."""
+
+    PROCESS = "process"
+    REST = "rest"
+
+
 class OptionType(StrEnum):
     BOOL = "bool"  # flag present/absent
     VALUE = "value"  # flag + free-text value
@@ -94,6 +103,8 @@ class ToolManifest(BaseModel):
     name: str
     binary: str
     description: str | None = None
+    #: How the tool runs — an argv subprocess (default) or an HTTP API.
+    kind: ToolKind = ToolKind.PROCESS
     version_check: list[str] = Field(default_factory=list)
     #: True when the tool always needs root (raw sockets, privileged binds, …),
     #: regardless of which options/profile are selected.

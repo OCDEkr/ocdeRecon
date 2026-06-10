@@ -28,13 +28,7 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from pentui.config import AppConfig
-from pentui.core.executor import (
-    ExecutorError,
-    build_runs,
-    preview,
-    requires_root,
-    run_command,
-)
+from pentui.core.executor import ExecutorError, requires_root
 from pentui.core.manifest import ToolManifest, ToolProfile
 from pentui.core.models import (
     GateState,
@@ -47,9 +41,10 @@ from pentui.core.models import (
 )
 from pentui.core.query import QuerySpec, group_by_subnet, materialize, run_query, select_hosts
 from pentui.core.registry import ToolRegistry
+from pentui.core.runner import RunRequest, get_runner
 from pentui.core.scope import classify_targets
 from pentui.parsers import get_parser
-from pentui.parsers.base import ParseContext
+from pentui.parsers.base import ParseContext, read_output
 from pentui.persistence.engagement import Engagement
 from pentui.persistence.repositories import (
     AuditLogRepository,
@@ -463,70 +458,56 @@ class WorkflowEngine:
         )
         assert scan.id is not None
         scan_dir = self.config.scan_dir(self.engagement.name, scan.id, tool=step.tool)
+        prefix = f"[{label}] " if label else ""
+
+        # The runner (process today, REST in a later phase) knows *how* to run the
+        # tool; the engine stays runner-agnostic for bookkeeping/parsing/scope.
+        req = RunRequest(
+            manifest=manifest,
+            profile=profile,
+            options=options,
+            extra_args=step.extra_args,
+            targets=targets,
+            scan_dir=scan_dir,
+            sudo=use_sudo,
+            sudo_password=self.sudo_password,
+        )
+        runner = get_runner(manifest)
         try:
-            runs = build_runs(
-                manifest,
-                profile=profile,
-                options=options,
-                extra_args=step.extra_args,
-                targets=targets,
-                scan_dir=str(scan_dir),
-                sudo=use_sudo,
-            )
+            plan = runner.prepare(req)
         except ExecutorError as exc:
             scan.status = ScanStatus.ERROR
             scans.update(scan)
             self._emit(step.id, "line", f"✗ {exc}")
             return False, scan.id
 
-        note = f"  (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
-        scan.command_str = preview(runs[0][1]) + note
-        scan.args = runs[0][1]
-        if manifest.output.artifact is not None:
-            scan.artifact_path = manifest.output.artifact.path.format(scan_dir=str(scan_dir))
+        scan.command_str = plan.command_str
+        scan.args = plan.args
+        if plan.artifact_path is not None:
+            scan.artifact_path = plan.artifact_path
         scan.status = ScanStatus.RUNNING
         scan.started_at = datetime.now()
         scans.update(scan)
         if use_sudo:
             self._audit("sudo_run", scan.command_str)
 
-        prefix = f"[{label}] " if label else ""
-        log_path = scan_dir / "stdout.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        exit_codes: list[int] = []
-        with log_path.open("w", encoding="utf-8") as log:
+        result = await runner.execute(
+            req,
+            plan,
+            on_line=lambda line: self._emit(step.id, "line", prefix + line),
+            on_marker=lambda text: self._emit(step.id, "line", prefix + text),
+        )
 
-            def on_line(line: str) -> None:
-                self._emit(step.id, "line", prefix + line)
-                log.write(line + "\n")
-
-            for sublabel, argv in runs:
-                if sublabel:
-                    self._emit(step.id, "line", f"{prefix}=== {sublabel} ===")
-                self._emit(step.id, "line", f"{prefix}$ {preview(argv)}")
-                try:
-                    result = await run_command(
-                        argv,
-                        on_line=on_line,
-                        stdin_data=self.sudo_password if use_sudo else None,
-                    )
-                except ExecutorError as exc:
-                    self._emit(step.id, "line", f"{prefix}✗ {exc}")
-                    exit_codes.append(127)
-                    continue
-                exit_codes.append(result.exit_code)
-
-        scan.exit_code = exit_codes[-1] if exit_codes else None
-        scan.raw_output_path = str(log_path)
+        scan.exit_code = result.exit_code
+        scan.raw_output_path = result.raw_output_path
         scan.finished_at = datetime.now()
-        ok = bool(exit_codes) and all(code == 0 for code in exit_codes)
-        scan.status = ScanStatus.DONE if ok else ScanStatus.ERROR
+        scan.status = ScanStatus.DONE if result.ok else ScanStatus.ERROR
         scans.update(scan)
 
-        if ok:
+        if result.ok:
             self._persist(scan, manifest)
             self._collect_artifact(scan, manifest, artifacts_out, label)
-        return ok, scan.id
+        return result.ok, scan.id
 
     def _collect_artifact(
         self, scan: Scan, manifest: ToolManifest, artifacts_out: Path, label: str
@@ -549,7 +530,7 @@ class WorkflowEngine:
         if parser is None:
             return
         ctx = ParseContext(
-            raw_stdout="",
+            raw_stdout=read_output(scan.raw_output_path),
             raw_stderr="",
             artifact_path=scan.artifact_path,
             scan_id=scan.id or 0,

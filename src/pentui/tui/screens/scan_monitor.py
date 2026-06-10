@@ -27,7 +27,7 @@ from pentui.core.executor import (
 from pentui.core.manifest import ToolManifest
 from pentui.core.models import Scan, ScanStatus
 from pentui.parsers import get_parser
-from pentui.parsers.base import ParseContext
+from pentui.parsers.base import ParseContext, read_output
 from pentui.persistence.engagement import Engagement
 from pentui.persistence.repositories import ScanRepository
 from pentui.persistence.store import merge_scan_result
@@ -178,7 +178,7 @@ class ScanMonitorScreen(Screen[None]):
             self.notify(f"No parser registered: {parser_name!r}", severity="warning")
             return None
         ctx = ParseContext(
-            raw_stdout="",
+            raw_stdout=read_output(self.scan.raw_output_path),
             raw_stderr="",
             artifact_path=self.scan.artifact_path,
             scan_id=self.scan.id or 0,
