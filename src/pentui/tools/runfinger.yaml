@@ -6,6 +6,10 @@
 # `binary` expects RunFinger.py on PATH (Kali ships it at
 # /usr/share/responder/tools/RunFinger.py — symlink it, or override this manifest
 # under ~/.config/pentui/tools/). Targets are written to a file and passed via -f.
+#
+# Legacy/optional: on Kali the preferred unsigned-host sweep is smb-enum.yaml
+# (`nxc smb`, preinstalled, same host.smb_signing output). RunFinger.py is not on
+# PATH by default; the shipped unsigned-relay workflow uses smb-enum instead.
 name: runfinger
 binary: RunFinger.py
 description: "Responder RunFinger — SMB signing / null-session fingerprint"

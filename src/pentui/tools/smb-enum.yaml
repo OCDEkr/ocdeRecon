@@ -1,0 +1,30 @@
+# SMB signing sweep / enumeration via NetExec (nxc).
+# Pointed at hosts (no creds), `nxc smb` reports each host's signing state in its
+# banner — signing:False = signing NOT required = an NTLM-relay target. The parser
+# records this on host.smb_signing so a downstream step can select them
+# (smb_signing_in) and feed ntlmrelayx -tf. This is the preferred unsigned-host
+# sweep on Kali (nxc ships preinstalled); see runfinger.yaml for the legacy
+# Responder-based alternative. No root needed (ordinary SMB connections to tcp/445).
+#
+# Dedicated manifest (not the multi-protocol nxc.yaml) because a parser is
+# tool-wide: this one is always the `smb` subcommand + the nxc_smb parser.
+name: smb-enum
+binary: nxc
+description: "SMB signing sweep / enumeration (NetExec)"
+
+target:
+  mode: append            # nxc smb <targets...>
+
+output:
+  stream: stdout
+  parser: nxc_smb
+  # Native list of hosts that don't require SMB signing, as a side artifact for the
+  # operator; the workflow itself relies on the parser -> host.smb_signing -> query
+  # path. The flag only writes a file (unauth-safe, harmless on every run), so it's
+  # always passed — same always-on pattern as cewl's --email_file.
+  extra_artifacts:
+    - {flag: "--gen-relay-list", path: "{scan_dir}/relay.txt"}
+
+profiles:
+  - {name: "Signing sweep", description: "Unauthenticated SMB signing + host info", args: ["smb"]}
+  - {name: "Anon enum", description: "Null-session shares + users + RID brute", args: ["smb", "--shares", "--users", "--rid-brute"]}
