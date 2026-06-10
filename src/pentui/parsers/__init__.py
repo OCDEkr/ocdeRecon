@@ -9,13 +9,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from pentui.core.models import ScanResult
-from pentui.parsers import nmap_xml
+from pentui.parsers import nessus, nmap_xml
 from pentui.parsers.base import ParseContext
 
 ParseFn = Callable[[ParseContext], ScanResult]
 
 _PARSERS: dict[str, ParseFn] = {
     nmap_xml.name: nmap_xml.parse,
+    nessus.name: nessus.parse,
 }
 
 

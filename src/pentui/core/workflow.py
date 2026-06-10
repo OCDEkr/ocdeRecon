@@ -472,7 +472,7 @@ class WorkflowEngine:
             sudo=use_sudo,
             sudo_password=self.sudo_password,
         )
-        runner = get_runner(manifest)
+        runner = get_runner(manifest, self.config)
         try:
             plan = runner.prepare(req)
         except ExecutorError as exc:

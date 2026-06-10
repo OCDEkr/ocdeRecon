@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from pentui.core.executor import ExecutorError
 from pentui.core.manifest import ToolKind, ToolManifest
 from pentui.core.runner import ProcessRunner, RunRequest, get_runner
 
@@ -26,9 +27,10 @@ def test_get_runner_returns_process_runner_by_default():
     assert isinstance(get_runner(ToolManifest(name="echo", binary="echo")), ProcessRunner)
 
 
-def test_get_runner_rejects_rest_until_phase_c():
+def test_get_runner_rest_requires_config():
+    # REST tools need app config (for connection settings); without it, error.
     rest = ToolManifest(name="nessus", binary="nessus", kind=ToolKind.REST)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ExecutorError):
         get_runner(rest)
 
 
