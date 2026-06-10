@@ -34,6 +34,7 @@ class WorkflowLaunchScreen(Screen[None]):
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
+        ("ctrl+r", "launch", "Launch"),
         ("q", "app.quit", "Quit"),
     ]
 
@@ -100,6 +101,15 @@ class WorkflowLaunchScreen(Screen[None]):
                 f"• {step.id}: {step.tool} ({step.profile or 'manual'}){after}{gate}{missing}"
             )
         self.query_one("#detail", Static).update("\n".join(lines))
+
+    @on(ListView.Selected, "#workflows")
+    def _on_selected(self) -> None:
+        # Enter on the list launches the highlighted workflow (as the label says).
+        self._launch()
+
+    def action_launch(self) -> None:
+        """Keyboard shortcut (Ctrl+R) for the Launch button."""
+        self._launch()
 
     @on(Button.Pressed, "#launch")
     def _launch(self) -> None:

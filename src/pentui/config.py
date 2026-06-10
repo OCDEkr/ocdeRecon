@@ -129,3 +129,23 @@ class AppConfig:
         else:
             settings.pop("output_root", None)
         self.save_settings(settings)
+
+    def theme_mode(self) -> str:
+        """``"dark"`` (default) or ``"light"`` — the UI brightness mode."""
+        value = self.load_settings().get("theme_mode")
+        return value if value in ("dark", "light") else "dark"
+
+    def set_theme_mode(self, mode: str) -> None:
+        settings = self.load_settings()
+        settings["theme_mode"] = "light" if mode == "light" else "dark"
+        self.save_settings(settings)
+
+    def palette(self) -> str:
+        """``"standard"`` (default) or ``"cb"`` — the colour-blind-safe accent axis."""
+        value = self.load_settings().get("palette")
+        return value if value in ("standard", "cb") else "standard"
+
+    def set_palette(self, palette: str) -> None:
+        settings = self.load_settings()
+        settings["palette"] = "cb" if palette == "cb" else "standard"
+        self.save_settings(settings)
