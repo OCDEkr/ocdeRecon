@@ -1,9 +1,9 @@
-"""End-to-end: discover -> runfinger -> only signing-disabled hosts get relayed.
+"""End-to-end: discover -> nxc smb -> only signing-disabled hosts get relayed.
 
-Uses fake nmap / runfinger / relay binaries so no real tools are needed. Proves
-the D1 handoff: runfinger's signing state lands on host.smb_signing, and the
-relay step's query (smb_signing_in: ["disabled"]) materialises an ip_list that is
-written to the relay tool's target file — i.e. only unsigned hosts are staged.
+Uses fake nmap / nxc / relay binaries so no real tools are needed. Proves the
+handoff: the nxc-smb signing state lands on host.smb_signing, and the relay step's
+query (smb_signing_in: ["disabled"]) materialises an ip_list that is written to the
+relay tool's target file — i.e. only unsigned hosts are staged.
 """
 
 from __future__ import annotations
@@ -33,17 +33,15 @@ if out:
 print("fake nmap done")
 '''
 
-# Fake runfinger: reads the -f host file and marks .1 disabled, others required.
-FAKE_RUNFINGER = """#!/usr/bin/env python3
-import sys
-path = None
-for i, a in enumerate(sys.argv):
-    if a == "-f":
-        path = sys.argv[i + 1]
-hosts = open(path).read().split() if path else []
-for ip in hosts:
-    signing = "False" if ip.endswith(".1") else "True"
-    print("['%s', Os:'Windows', Signing:'%s']" % (ip, signing))
+# Fake nxc smb: prints an nxc-style banner per positional IP target (target.mode
+# append), marking .1 signing:False (disabled), others signing:True (required).
+FAKE_NXC = r"""#!/usr/bin/env python3
+import re, sys
+ip_re = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+for a in sys.argv[1:]:
+    if ip_re.match(a):
+        signing = "False" if a.endswith(".1") else "True"
+        print("SMB  %s  445  HOST  [*] Windows (name:HOST) (signing:%s)" % (a, signing))
 """
 
 
@@ -53,9 +51,9 @@ def _setup(tmp_path: Path):
     nmap = tmp_path / "fakenmap"
     nmap.write_text(FAKE_NMAP)
     nmap.chmod(0o755)
-    finger = tmp_path / "fakefinger"
-    finger.write_text(FAKE_RUNFINGER)
-    finger.chmod(0o755)
+    nxc = tmp_path / "fakenxc"
+    nxc.write_text(FAKE_NXC)
+    nxc.chmod(0o755)
 
     tools = tmp_path / "tools"
     tools.mkdir()
@@ -63,9 +61,8 @@ def _setup(tmp_path: Path):
         f"name: nmap\nbinary: {nmap}\ntarget: {{mode: append}}\n"
         f"output: {{artifact: {{flag: '-oX', path: '{{scan_dir}}/nmap.xml'}}, parser: nmap_xml}}\n"
     )
-    (tools / "runfinger.yaml").write_text(
-        f"name: runfinger\nbinary: {finger}\ntarget: {{mode: flag, flag: '-f'}}\n"
-        f"output: {{parser: runfinger}}\n"
+    (tools / "smb-enum.yaml").write_text(
+        f"name: smb-enum\nbinary: {nxc}\ntarget: {{mode: append}}\noutput: {{parser: nxc_smb}}\n"
     )
     # Fake relay tool: echo, but with ntlmrelayx's -tf target-file mode so we can
     # read back exactly which hosts were staged for relay.
@@ -89,7 +86,7 @@ async def test_only_unsigned_hosts_are_staged_for_relay(tmp_path):
                 {"id": "discover", "tool": "nmap", "targets": {"from": "project"}},
                 {
                     "id": "finger",
-                    "tool": "runfinger",
+                    "tool": "smb-enum",
                     "after": ["discover"],
                     "input": {"from": "hosts", "where": {"port_open_in": [445]}, "as": "ip_list"},
                 },
@@ -108,7 +105,7 @@ async def test_only_unsigned_hosts_are_staged_for_relay(tmp_path):
     )
     await WorkflowEngine(eng, registry, config, unattended=True).run(wf)
 
-    # runfinger recorded each host's signing state on the unified model.
+    # nxc smb recorded each host's signing state on the unified model.
     signing = {
         h.ip: h.smb_signing for h in HostRepository(eng.conn).list_for_project(eng.project_id)
     }
@@ -126,6 +123,7 @@ def test_shipped_unsigned_relay_workflow_is_valid():
     wf = build_workflow_registry().get("unsigned-relay")
     assert wf is not None
     assert [s.id for s in wf.steps] == ["discover", "finger", "relay"]
+    assert wf.steps[1].tool == "smb-enum"
     relay = wf.steps[-1]
     assert relay.tool == "ntlmrelayx" and relay.gate is True
     assert relay.input is not None and relay.input.where.smb_signing_in == ["disabled"]
