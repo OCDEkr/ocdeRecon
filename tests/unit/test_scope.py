@@ -50,6 +50,22 @@ def test_hostname_scope_by_exact_match():
     assert checker.classify("other.example").status is ScopeStatus.OUT_OF_SCOPE
 
 
+def test_hostname_scope_covers_subdomains():
+    # A domain include/exclude covers its subdomains, but not lookalikes.
+    checker = ScopeChecker(
+        _rules(("example.com", ScopeKind.INCLUDE), ("secret.example.com", ScopeKind.EXCLUDE))
+    )
+    assert checker.classify("example.com").status is ScopeStatus.IN_SCOPE
+    assert checker.classify("www.example.com").status is ScopeStatus.IN_SCOPE
+    assert checker.classify("a.b.example.com").status is ScopeStatus.IN_SCOPE
+    # excluded subdomain (and its children) win over the broader include
+    assert checker.classify("secret.example.com").status is ScopeStatus.OUT_OF_SCOPE
+    assert checker.classify("db.secret.example.com").status is ScopeStatus.OUT_OF_SCOPE
+    # a lookalike domain is NOT a subdomain
+    assert checker.classify("notexample.com").status is ScopeStatus.OUT_OF_SCOPE
+    assert checker.classify("example.com.evil.net").status is ScopeStatus.OUT_OF_SCOPE
+
+
 def test_mixed_ip_versions_do_not_crash():
     checker = ScopeChecker(_rules(("10.0.0.0/24", ScopeKind.INCLUDE)))
     # An IPv6 target against an IPv4-only include is simply out of scope.

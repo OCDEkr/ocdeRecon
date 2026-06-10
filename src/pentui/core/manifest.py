@@ -38,6 +38,7 @@ class OptionType(StrEnum):
 class TargetMode(StrEnum):
     APPEND = "append"  # targets appended as trailing argv tokens
     FLAG = "flag"  # targets written to a file passed via `flag`
+    FLAG_EACH = "flag_each"  # each target passed inline as `flag <target>` (e.g. -d domain)
 
 
 class ToolOption(BaseModel):
@@ -94,8 +95,8 @@ class TargetSpec(BaseModel):
 
     @model_validator(mode="after")
     def _check_flag(self) -> TargetSpec:
-        if self.mode is TargetMode.FLAG and not self.flag:
-            raise ValueError("target.mode 'flag' requires a 'flag'")
+        if self.mode in (TargetMode.FLAG, TargetMode.FLAG_EACH) and not self.flag:
+            raise ValueError(f"target.mode {self.mode.value!r} requires a 'flag'")
         return self
 
 

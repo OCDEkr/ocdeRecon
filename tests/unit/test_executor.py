@@ -113,6 +113,24 @@ def test_build_argv_sudo_prefix(nmap, tmp_path):
     assert argv[4] == "nmap"
 
 
+def test_build_argv_flag_each_target_mode():
+    from pentui.core.manifest import TargetMode, TargetSpec
+
+    manifest = ToolManifest(
+        name="sub", binary="sublist3r", target=TargetSpec(mode=TargetMode.FLAG_EACH, flag="-d")
+    )
+    argv = build_argv(manifest, targets=["a.com", "b.com"])
+    # each target inline as `-d <target>` (no targets file)
+    assert argv == ["sublist3r", "-d", "a.com", "-d", "b.com"]
+
+
+def test_flag_each_requires_a_flag():
+    from pentui.core.manifest import TargetMode, TargetSpec
+
+    with pytest.raises(ValueError, match="requires a 'flag'"):
+        TargetSpec(mode=TargetMode.FLAG_EACH)
+
+
 def test_build_argv_rejects_bad_port(nmap, tmp_path):
     with pytest.raises(ExecutorError):
         build_argv(nmap, options={"-p": "99999"}, targets=["x"], scan_dir=tmp_path)
