@@ -67,3 +67,24 @@ def test_malformed_output_root_ignored(tmp_path):
     config = _config(tmp_path)
     config.save_settings({"output_root": 123})
     assert config.output_root() is None
+
+
+def test_output_root_override_wins_over_global_and_default(tmp_path):
+    config = _config(tmp_path)
+    config.set_output_root("/global/pentests")
+    # A per-engagement override takes precedence over the global setting.
+    assert config.scan_dir(
+        "acme", 5, tool="nmap", output_root_override=Path("/eng/acme-out")
+    ) == Path("/eng/acme-out/acme/scans/nmap/5")
+    # None falls back to the global root (existing behavior).
+    assert config.scan_dir("acme", 5, tool="nmap", output_root_override=None) == Path(
+        "/global/pentests/acme/scans/nmap/5"
+    )
+
+
+def test_output_root_override_without_global_or_setting(tmp_path):
+    config = _config(tmp_path)
+    # No global output_root set: the override is the only root in play.
+    assert config.scan_dir("acme", 1, tool="nmap", output_root_override=Path("/just/here")) == Path(
+        "/just/here/acme/scans/nmap/1"
+    )

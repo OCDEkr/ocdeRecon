@@ -16,7 +16,16 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Select
+from textual.widgets import (
+    Button,
+    Footer,
+    Header,
+    Input,
+    Label,
+    ListItem,
+    ListView,
+    SelectionList,
+)
 
 from pentui.config import AppConfig
 from pentui.core.models import ScopeKind
@@ -46,6 +55,7 @@ class ProjectSelectScreen(Screen[None]):
     #new { height: auto; border: round $panel; margin: 0 1; padding: 0 1; }
     #new Label { padding: 0; }
     .field { height: auto; margin-bottom: 1; }
+    #kickoff { height: auto; max-height: 8; }
     """
 
     BINDINGS = [
@@ -78,13 +88,14 @@ class ProjectSelectScreen(Screen[None]):
             )
             yield Input(placeholder="excludes (optional)", id="excludes", classes="field")
             yield Input(placeholder="initial targets (optional)", id="targets", classes="field")
-            yield Label("Run workflow on create (unattended, optional):")
-            yield Select(
-                self._workflow_options(),
-                prompt="— none —",
-                id="kickoff",
+            yield Input(
+                value=str(self.config.output_root() or ""),
+                placeholder="output dir (optional, e.g. ~/pentests/acme)",
+                id="output",
                 classes="field",
             )
+            yield Label("Run workflows on create (unattended, ↑/↓ + space to select, optional):")
+            yield SelectionList[str](*self._workflow_options(), id="kickoff")
             yield Horizontal(Button("Create & open", variant="primary", id="create"))
         yield Footer()
 
@@ -98,6 +109,8 @@ class ProjectSelectScreen(Screen[None]):
         self._refresh_list()
         for field in ("#name", "#client", "#includes", "#excludes", "#targets"):
             self.query_one(field, Input).value = ""
+        self.query_one("#output", Input).value = str(self.config.output_root() or "")
+        self.query_one("#kickoff", SelectionList).deselect_all()
         self._focus_default()
 
     def _refresh_list(self) -> None:
@@ -182,7 +195,7 @@ class ProjectSelectScreen(Screen[None]):
 
     def _open(self, name: str, *, create: bool = False) -> None:
         engagement = open_engagement(self.config, name)
-        kickoff: str | None = None
+        kickoffs: list[str] = []
         target_values: list[str] = []
         if create:
             client = self.query_one("#client", Input).value.strip()
@@ -192,6 +205,16 @@ class ProjectSelectScreen(Screen[None]):
                     (client, engagement.project_id),
                 )
                 engagement.conn.commit()
+            output_dir = self.query_one("#output", Input).value.strip()
+            if output_dir:
+                engagement.conn.execute(
+                    "UPDATE project SET output_dir = ? WHERE id = ?;",
+                    (output_dir, engagement.project_id),
+                )
+                engagement.conn.commit()
+                # Reflect on the in-memory object so the kickoff (launched below)
+                # writes its scans into the chosen folder.
+                engagement.output_dir = output_dir
             scopes = ScopeRuleRepository(engagement.conn)
             for value in _split(self.query_one("#includes", Input).value):
                 scopes.create(engagement.project_id, value, ScopeKind.INCLUDE)
@@ -201,27 +224,28 @@ class ProjectSelectScreen(Screen[None]):
             target_values = _split(self.query_one("#targets", Input).value)
             for value in target_values:
                 targets.create(engagement.project_id, value)
-            selected = self.query_one("#kickoff", Select).value
-            kickoff = selected if isinstance(selected, str) else None
+            kickoffs = list(self.query_one("#kickoff", SelectionList).selected)
 
         cast("PentuiApp", self.app).engagement = engagement
         from pentui.tui.screens.dashboard import DashboardScreen
 
         self.app.push_screen(DashboardScreen(engagement, self.registry, self.config))
-        if kickoff is not None:
-            self._launch_kickoff(engagement, kickoff, target_values)
+        if kickoffs:
+            self._launch_kickoffs(engagement, kickoffs, target_values)
 
-    def _launch_kickoff(self, engagement: Engagement, name: str, targets: list[str]) -> None:
-        """Push the chosen recon workflow (unattended) on top of the dashboard."""
-        wf = self.workflows.get(name)
-        if wf is None:
+    def _launch_kickoffs(
+        self, engagement: Engagement, names: list[str], targets: list[str]
+    ) -> None:
+        """Push the chosen recon workflows (unattended, sequential) on the dashboard."""
+        workflows = [wf for name in names if (wf := self.workflows.get(name)) is not None]
+        if not workflows:
             return
-        # The recon chain starts with masscan over the engagement's targets; with
-        # none set the whole chain is a no-op, so don't bother launching.
+        # The recon chains start from the engagement's targets; with none set
+        # they're a no-op, so don't bother launching.
         if not targets:
             self.notify(
-                f"'{name}' needs initial targets to scan (e.g. the /16) — "
-                "set them and launch it from the dashboard with 'w'.",
+                "Selected workflow(s) need initial targets to scan (e.g. the /16) — "
+                "set them and launch from the dashboard with 'w'.",
                 severity="warning",
                 timeout=8,
             )
@@ -233,7 +257,7 @@ class ProjectSelectScreen(Screen[None]):
                 engagement,
                 self.registry,
                 self.config,
-                wf,
+                workflows,
                 unattended=True,
                 is_root=os.geteuid() == 0,
             )

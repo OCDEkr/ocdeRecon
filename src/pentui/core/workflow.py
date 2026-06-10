@@ -457,7 +457,12 @@ class WorkflowEngine:
             )
         )
         assert scan.id is not None
-        scan_dir = self.config.scan_dir(self.engagement.name, scan.id, tool=step.tool)
+        scan_dir = self.config.scan_dir(
+            self.engagement.name,
+            scan.id,
+            tool=step.tool,
+            output_root_override=self.engagement.output_root_override,
+        )
         prefix = f"[{label}] " if label else ""
 
         # The runner (process today, REST in a later phase) knows *how* to run the

@@ -126,7 +126,7 @@ class WorkflowLaunchScreen(Screen[None]):
                 self.engagement,
                 self.registry,
                 self.config,
-                wf,
+                [wf],
                 unattended=self.query_one("#unattended", Checkbox).value,
                 is_root=os.geteuid() == 0,
             )

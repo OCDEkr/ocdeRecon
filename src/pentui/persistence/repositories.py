@@ -60,6 +60,7 @@ class ProjectRepository:
             name=row["name"],
             client=row["client"],
             notes=row["notes"],
+            output_dir=row["output_dir"],
             created_at=row["created_at"],
         )
 

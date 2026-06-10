@@ -75,24 +75,41 @@ class AppConfig:
     def engagement_db_path(self, name: str) -> Path:
         return self.engagement_dir(name) / "engagement.db"
 
-    def tool_output_root(self, engagement: str, tool: str | None = None) -> Path:
+    def tool_output_root(
+        self,
+        engagement: str,
+        tool: str | None = None,
+        *,
+        output_root_override: Path | None = None,
+    ) -> Path:
         """Base dir for a tool's scans in an engagement (each scan is a numbered
         subdir below this): ``<root>/<engagement>/scans/<tool>``.
 
-        ``<root>`` is the configurable output root (see ``output_root``) — e.g.
-        ``~/pentests`` — or the XDG engagements dir when unset. The engagement
-        and per-tool segments are always present, so the same tool lands in
-        different paths per engagement and each tool keeps its own folder. This
-        is registry-driven: any tool name works with no per-tool code.
+        ``<root>`` is ``output_root_override`` when given (the per-engagement
+        output dir), else the configurable global output root (see
+        ``output_root``) — e.g. ``~/pentests`` — or the XDG engagements dir when
+        both are unset. The engagement and per-tool segments are always present,
+        so the same tool lands in different paths per engagement and each tool
+        keeps its own folder. This is registry-driven: any tool name works with
+        no per-tool code.
         """
-        root = self.output_root()
+        root = output_root_override or self.output_root()
         base = (root / engagement) if root else self.engagement_dir(engagement)
         scans = base / "scans"
         return scans / tool if tool else scans
 
-    def scan_dir(self, engagement: str, scan_id: int, tool: str | None = None) -> Path:
+    def scan_dir(
+        self,
+        engagement: str,
+        scan_id: int,
+        tool: str | None = None,
+        *,
+        output_root_override: Path | None = None,
+    ) -> Path:
         """Where a scan's raw stdout log and artifacts (e.g. nmap.xml) are written."""
-        return self.tool_output_root(engagement, tool) / str(scan_id)
+        return self.tool_output_root(
+            engagement, tool, output_root_override=output_root_override
+        ) / str(scan_id)
 
     def reports_dir(self, engagement: str) -> Path:
         """Where exported reports are written for an engagement."""

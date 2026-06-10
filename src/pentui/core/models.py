@@ -68,6 +68,8 @@ class Project(BaseModel):
     name: str
     client: str | None = None
     notes: str | None = None
+    #: Per-engagement scan-output root; None falls back to the global output_root.
+    output_dir: str | None = None
     created_at: datetime | None = None
 
 

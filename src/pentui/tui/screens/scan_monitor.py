@@ -15,6 +15,7 @@ from typing import TextIO
 from textual import work
 from textual.app import ComposeResult
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import Footer, Header, RichLog, Static
 
 from pentui.core.executor import (
@@ -43,6 +44,9 @@ class ScanMonitorScreen(Screen[None]):
     RichLog { height: 1fr; border: round $panel; margin: 0 1; }
     """
 
+    #: Braille spinner frames cycled on the status line as a liveness heartbeat.
+    _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
     BINDINGS = [
         ("s", "stop", "Stop"),
         ("r", "view_results", "Results"),
@@ -70,14 +74,36 @@ class ScanMonitorScreen(Screen[None]):
         self._proc: Process | None = None
         self._stopped = False
         self._log: TextIO | None = None
+        self._spin: Timer | None = None
+        self._spin_frame = 0
 
     def action_stop(self) -> None:
         self._stopped = True
         if self._proc is not None and self._proc.returncode is None:
+            self._stop_spin()
             self.query_one("#status", Static).update("[yellow]Stopping…[/yellow]")
             terminate_process(self._proc)
         else:
             self.notify("Nothing running to stop.", severity="warning")
+
+    def _tick(self) -> None:
+        """Animate the status line so a long-running scan reads as alive, not hung."""
+        try:
+            status = self.query_one("#status", Static)
+        except Exception:
+            return  # timer can fire mid-teardown, before/after the widget exists
+        frame = self._SPINNER[self._spin_frame % len(self._SPINNER)]
+        self._spin_frame += 1
+        elapsed = ""
+        if self.scan.started_at is not None:
+            secs = int((datetime.now() - self.scan.started_at).total_seconds())
+            elapsed = f"  ({secs // 60}:{secs % 60:02d})"
+        status.update(f"[b]Running[/b] {frame}{elapsed}")
+
+    def _stop_spin(self) -> None:
+        if self._spin is not None:
+            self._spin.stop()
+            self._spin = None
 
     def compose(self) -> ComposeResult:
         first = preview(self.runs[0][1]) if self.runs else ""
@@ -111,6 +137,7 @@ class ScanMonitorScreen(Screen[None]):
         self.scan.status = ScanStatus.RUNNING
         self.scan.started_at = datetime.now()
         scans.update(self.scan)
+        self._spin = self.set_interval(0.4, self._tick)
 
         log_path = Path(self.scan_dir) / "stdout.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -145,6 +172,7 @@ class ScanMonitorScreen(Screen[None]):
         self.scan.exit_code = exit_codes[-1] if exit_codes else None
         self.scan.finished_at = datetime.now()
 
+        self._stop_spin()
         if self._stopped:
             self.scan.status = ScanStatus.CANCELLED
             scans.update(self.scan)

@@ -148,6 +148,12 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE host ADD COLUMN is_dc INTEGER;
     """,
+    # ---- v4: per-engagement scan-output root --------------------------------
+    # NULL = use the global output_root setting / XDG default. Set on the
+    # create-engagement form so an unattended kickoff writes to the chosen folder.
+    """
+    ALTER TABLE project ADD COLUMN output_dir TEXT;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
