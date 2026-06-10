@@ -1,0 +1,20 @@
+# Domain-controller discovery via NetExec LDAP.
+# A host answering LDAP (tcp/389) is a domain controller; nxc's banner gives its
+# hostname + domain. The parser tags such hosts is_dc=True so downstream AD steps
+# can select them (where: {is_dc: true}). Anonymous identification needs no creds.
+#
+# Dedicated manifest (not the multi-protocol nxc.yaml) because a parser is
+# tool-wide: this one is always the `ldap` subcommand + the nxc_ldap parser.
+name: dc-discovery
+binary: nxc
+description: "Domain controller discovery (NetExec LDAP)"
+
+target:
+  mode: append            # nxc ldap <targets>
+
+output:
+  stream: stdout
+  parser: nxc_ldap
+
+profiles:
+  - {name: "Identify", description: "Anonymous LDAP identification", args: ["ldap"]}

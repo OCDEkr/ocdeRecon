@@ -55,8 +55,9 @@ async def test_q_quits_from_dashboard(tmp_path):
 async def test_dashboard_reflects_scan_after_return(tmp_path):
     app = PentuiApp(config=_config(tmp_path))
     async with app.run_test(size=(100, 50)) as pilot:
-        await start_engagement(pilot, name="dash", includes="10.0.0.0/24", targets="10.0.0.1")
-        # On the tool-config screen with fakenmap as the default tool.
+        await start_engagement(
+            pilot, name="dash", includes="10.0.0.0/24", targets="10.0.0.1", tool="fakenmap"
+        )
         app.screen.query_one("#targets", Input).value = "10.0.0.1"
         await pilot.pause()
         await pilot.click("#run")

@@ -133,6 +133,12 @@ class Host(BaseModel):
     ip: str
     hostname: str | None = None
     state: str = "up"
+    #: SMB signing state from a fingerprint (e.g. runfinger): "required",
+    #: "disabled" (not enforced → a relay target), or None when unknown.
+    smb_signing: str | None = None
+    #: True when identified as an Active Directory domain controller (e.g. answers
+    #: LDAP via nxc); None when not checked. Never set False (enrich, don't wipe).
+    is_dc: bool | None = None
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     ports: list[Port] = Field(default_factory=list)

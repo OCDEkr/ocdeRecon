@@ -32,7 +32,7 @@ def _make_config(tmp_path: Path) -> AppConfig:
 async def test_preview_updates_with_targets(tmp_path):
     app = PentuiApp(config=_make_config(tmp_path))
     async with app.run_test(size=(100, 50)) as pilot:
-        await start_engagement(pilot, name="prev")
+        await start_engagement(pilot, name="prev", tool="echo")
         app.screen.query_one("#targets", Input).value = "alpha bravo"
         await pilot.pause()
         cmd = str(app.screen.query_one("#cmd", Static).render())
@@ -43,7 +43,7 @@ async def test_run_streams_to_completion(tmp_path):
     config = _make_config(tmp_path)
     app = PentuiApp(config=config)
     async with app.run_test(size=(100, 50)) as pilot:
-        await start_engagement(pilot, name="streamy")
+        await start_engagement(pilot, name="streamy", tool="echo")
         app.screen.query_one("#targets", Input).value = "hello world"
         await pilot.pause()
         await pilot.click("#run")

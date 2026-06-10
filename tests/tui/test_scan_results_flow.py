@@ -69,8 +69,7 @@ async def test_scan_parses_persists_and_browses(tmp_path):
     config = _make_config(tmp_path)
     app = PentuiApp(config=config)
     async with app.run_test(size=(100, 50)) as pilot:
-        await start_engagement(pilot, name="recon", includes="10.0.0.0/24")
-        # fakenmap sorts before the packaged nmap, so it's the default tool.
+        await start_engagement(pilot, name="recon", includes="10.0.0.0/24", tool="fakenmap")
         assert app.screen.manifest.name == "fakenmap"
         app.screen.query_one("#targets", Input).value = "10.0.0.1"
         await pilot.pause()

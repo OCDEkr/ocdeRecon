@@ -333,13 +333,25 @@ class HostRepository:
         self.conn = conn
 
     def upsert(self, project_id: int, host: Host) -> int:
+        # COALESCE on hostname/smb_signing/is_dc so a later scan that didn't
+        # observe them (e.g. a signing-blind port scan) enriches, never wipes.
         self.conn.execute(
-            "INSERT INTO host (project_id, ip, hostname, state, last_seen) "
-            "VALUES (?, ?, ?, ?, datetime('now')) "
+            "INSERT INTO host (project_id, ip, hostname, state, smb_signing, is_dc, last_seen) "
+            "VALUES (?, ?, ?, ?, ?, ?, datetime('now')) "
             "ON CONFLICT(project_id, ip) DO UPDATE SET "
             "  hostname = COALESCE(excluded.hostname, host.hostname), "
-            "  state = excluded.state, last_seen = datetime('now');",
-            (project_id, host.ip, host.hostname, host.state),
+            "  state = excluded.state, "
+            "  smb_signing = COALESCE(excluded.smb_signing, host.smb_signing), "
+            "  is_dc = COALESCE(excluded.is_dc, host.is_dc), "
+            "  last_seen = datetime('now');",
+            (
+                project_id,
+                host.ip,
+                host.hostname,
+                host.state,
+                host.smb_signing,
+                None if host.is_dc is None else int(host.is_dc),
+            ),
         )
         self.conn.commit()
         row = self.conn.execute(
@@ -358,6 +370,8 @@ class HostRepository:
                 ip=r["ip"],
                 hostname=r["hostname"],
                 state=r["state"],
+                smb_signing=r["smb_signing"],
+                is_dc=None if r["is_dc"] is None else bool(r["is_dc"]),
             )
             for r in rows
         ]
