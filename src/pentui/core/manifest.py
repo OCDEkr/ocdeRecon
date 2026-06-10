@@ -86,6 +86,10 @@ class ArtifactSpec(BaseModel):
 class OutputSpec(BaseModel):
     stream: str = "stdout"
     artifact: ArtifactSpec | None = None
+    #: Secondary output files written via their own flags (e.g. cewl
+    #: ``--email_file``). Emitted into argv with ``{scan_dir}`` templated like
+    #: ``artifact``, but never the parsed artifact — they're side outputs.
+    extra_artifacts: list[ArtifactSpec] = Field(default_factory=list)
     parser: str | None = None
 
 

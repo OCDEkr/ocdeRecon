@@ -107,7 +107,17 @@ def test_cewl_manifest_builds_wordlist_argv(tmp_path):
     argv = build_argv(cewl, options={"-d": "3"}, targets=["http://site"], scan_dir=tmp_path)
     assert argv[0] == "cewl"
     assert argv[argv.index("-w") + 1].endswith("wordlist.txt")
+    # Emails get their own clean artifact alongside the wordlist (--email_file).
+    assert argv[argv.index("--email_file") + 1].endswith("emails.txt")
     assert argv[-1] == "http://site"  # url passed positionally
+
+
+def test_cewl_district_profile_enables_email_harvest():
+    cewl = load_manifest(PACKAGED_TOOLS_DIR / "cewl.yaml")
+    profile = cewl.profile("District wordlist")
+    assert profile is not None
+    # Recommended default: depth 2, words >= 8, number-bearing words, -e on.
+    assert profile.args == ["-d", "2", "-m", "8", "--with-numbers", "-e"]
 
 
 def test_shipped_subdomain_recon_workflow_is_valid():
