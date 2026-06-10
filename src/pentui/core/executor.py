@@ -146,10 +146,13 @@ def build_argv(
         argv.extend(extra_args)
 
     artifact = manifest.output.artifact
+    extra_artifacts = manifest.output.extra_artifacts
+    if (artifact is not None or extra_artifacts) and scan_dir is None:
+        raise ExecutorError(f"{manifest.name!r} produces an artifact but no scan_dir given")
     if artifact is not None:
-        if scan_dir is None:
-            raise ExecutorError(f"{manifest.name!r} produces an artifact but no scan_dir given")
         argv.extend([artifact.flag, artifact.path.format(scan_dir=str(scan_dir))])
+    for extra in extra_artifacts:
+        argv.extend([extra.flag, extra.path.format(scan_dir=str(scan_dir))])
 
     targets = list(targets or [])
     if targets:

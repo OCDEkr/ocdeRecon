@@ -1,8 +1,19 @@
 # CeWL — crawl a site and generate a custom wordlist for password attacks.
+#
+# Intended use: point it at the engagement district's MAIN public website to
+# harvest local vocabulary (school/mascot/street/staff names, district jargon)
+# that generic lists like rockyou don't have. That small, district-specific list
+# is the right input for a heavy hashcat rule pass (OneRuleToRuleThemAll), run as
+# its own fast pass *before* the big generic lists — see the "District wordlist"
+# profile below. Don't feed it printer/IoT webUIs (vendor boilerplate, not
+# district words).
+#
 # The wordlist is an artifact (no parser / model change): point a downstream
-# credential tool's file-input flag at it (file_from / file_input). CeWL takes a
-# single URL per run, passed positionally; feed it a web target URL (e.g. from
-# the query layer's target_urls). No root needed.
+# credential tool's file-input flag at it, or hand it to hashcat directly. CeWL
+# takes a single URL per run, passed positionally; feed it a web target URL. With
+# `-e` (email harvesting) on, CeWL also writes any email addresses it finds to a
+# second artifact, `emails.txt` (--email_file), handy as a username/spray feed.
+# No root needed.
 name: cewl
 binary: cewl
 description: "Crawl a site to build a custom wordlist"
@@ -15,12 +26,23 @@ output:
   artifact:
     flag: "-w"
     path: "{scan_dir}/wordlist.txt"
+  # When -e is on, CeWL writes harvested emails here instead of stdout. The flag
+  # is always passed but is a no-op unless -e enables extraction, so it's safe on
+  # every run; no file is created when no emails are found.
+  extra_artifacts:
+    - {flag: "--email_file", path: "{scan_dir}/emails.txt"}
 
 options:
   - {flag: "-d", label: "Crawl depth", type: value, default: "2", placeholder: "e.g. 2"}
-  - {flag: "-m", label: "Minimum word length", type: value, default: "5", placeholder: "e.g. 5"}
+  - {flag: "-m", label: "Minimum word length", type: value, default: "8", placeholder: "e.g. 8"}
   - {flag: "--with-numbers", label: "Include words with numbers", type: bool}
+  - {flag: "-e", label: "Harvest emails (to emails.txt)", type: bool}
   - {flag: "--lowercase", label: "Lowercase all words", type: bool}
 
 profiles:
-  - {name: "Deep", description: "Depth 3, words >= 6 chars", args: ["-d", "3", "-m", "6"]}
+  # Recommended default for the district main-site run: depth 2, words >= 8 chars,
+  # keep number-bearing words (e.g. Wildcats2024), and harvest emails.
+  - name: "District wordlist"
+    description: "Depth 2, words >= 8 chars, with-numbers + email harvest (recommended)"
+    args: ["-d", "2", "-m", "8", "--with-numbers", "-e"]
+  - {name: "Deep", description: "Depth 3, words >= 8 chars", args: ["-d", "3", "-m", "8"]}
