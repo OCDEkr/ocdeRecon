@@ -1,0 +1,25 @@
+# RunFinger (Responder) — fingerprints SMB signing / null sessions per host.
+# Hosts where signing is NOT required are NTLM-relay targets; the parser records
+# this on host.smb_signing so a downstream step can select them (smb_signing_in)
+# and feed ntlmrelayx -tf. No root needed (ordinary SMB connections to tcp/445).
+#
+# `binary` expects RunFinger.py on PATH (Kali ships it at
+# /usr/share/responder/tools/RunFinger.py — symlink it, or override this manifest
+# under ~/.config/pentui/tools/). Targets are written to a file and passed via -f.
+name: runfinger
+binary: RunFinger.py
+description: "Responder RunFinger — SMB signing / null-session fingerprint"
+
+target:
+  mode: flag
+  flag: "-f"                # discovered hosts written to a file, passed as -f <file>
+
+output:
+  stream: stdout            # parsed from stdout (no artifact file)
+  parser: runfinger
+
+options:
+  - {flag: "-g", label: "Grepable output", type: bool}
+
+profiles:
+  - {name: "Grepable", description: "Grepable output (stable to parse)", args: ["-g"]}

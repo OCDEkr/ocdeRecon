@@ -29,7 +29,11 @@ class ReportExportScreen(Screen[None]):
     #controls { height: auto; padding: 0 1; }
     """
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "app.quit", "Quit")]
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        ("ctrl+e", "export", "Export"),
+        ("q", "app.quit", "Quit"),
+    ]
 
     def __init__(self, engagement: Engagement, config: AppConfig) -> None:
         super().__init__()
@@ -54,6 +58,10 @@ class ReportExportScreen(Screen[None]):
             if self.query_one(f"#fmt-{fmt.value}", Checkbox).value:
                 chosen.append(fmt)
         return chosen
+
+    def action_export(self) -> None:
+        """Keyboard shortcut (Ctrl+E) for the Export button."""
+        self._export()
 
     @on(Button.Pressed, "#export")
     def _export(self) -> None:

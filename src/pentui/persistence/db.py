@@ -137,6 +137,17 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_scan_project ON scan(project_id);
     CREATE INDEX idx_steprun_run ON step_run(workflow_run_id);
     """,
+    # ---- v2: SMB signing state per host (runfinger -> relay targeting) -------
+    # NULL = unknown/not fingerprinted. 'required' = signing enforced.
+    # 'disabled' = signing not required -> an NTLM-relay target.
+    """
+    ALTER TABLE host ADD COLUMN smb_signing TEXT;
+    """,
+    # ---- v3: domain-controller flag per host (DC discovery) -----------------
+    # NULL = unknown/not checked. 1 = identified domain controller (answers LDAP).
+    """
+    ALTER TABLE host ADD COLUMN is_dc INTEGER;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

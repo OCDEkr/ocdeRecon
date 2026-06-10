@@ -76,7 +76,12 @@ class ToolConfigScreen(Screen[None]):
     Button { margin: 1 1 0 0; }
     """
 
-    BINDINGS = [("escape", "app.pop_screen", "Back"), ("q", "app.quit", "Quit")]
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Back"),
+        ("ctrl+r", "run", "Run scan"),
+        ("ctrl+t", "use_targets", "Use project targets"),
+        ("q", "app.quit", "Quit"),
+    ]
 
     def __init__(
         self,
@@ -238,6 +243,14 @@ class ToolConfigScreen(Screen[None]):
     def _on_run(self) -> None:
         # Run in a worker so the scope-override modal can use push_screen_wait.
         self._launch()
+
+    def action_run(self) -> None:
+        """Keyboard shortcut (Ctrl+R) for the Run scan button."""
+        self._launch()
+
+    def action_use_targets(self) -> None:
+        """Keyboard shortcut (Ctrl+T) for the Use-project-targets button."""
+        self._load_targets()
 
     @work
     async def _launch(self) -> None:

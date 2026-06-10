@@ -48,7 +48,11 @@ class ProjectSelectScreen(Screen[None]):
     .field { height: auto; margin-bottom: 1; }
     """
 
-    BINDINGS = [("d", "delete", "Delete"), ("q", "app.quit", "Quit")]
+    BINDINGS = [
+        ("ctrl+n", "create", "Create & open"),
+        ("d", "delete", "Delete"),
+        ("q", "app.quit", "Quit"),
+    ]
 
     def __init__(self, config: AppConfig, registry: ToolRegistry) -> None:
         super().__init__()
@@ -120,6 +124,10 @@ class ProjectSelectScreen(Screen[None]):
     def _open_existing(self, event: ListView.Selected) -> None:
         if event.item.name:
             self._open(event.item.name)
+
+    def action_create(self) -> None:
+        """Keyboard shortcut (Ctrl+N) for the Create & open button."""
+        self._create()
 
     @on(Button.Pressed, "#create")
     def _create(self) -> None:

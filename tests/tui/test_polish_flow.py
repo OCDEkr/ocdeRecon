@@ -8,7 +8,6 @@ from textual.widgets import DataTable
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
-from pentui.tui.themes import COLORBLIND_THEME, DEFAULT_THEME
 
 from ._helpers import start_engagement
 
@@ -26,16 +25,16 @@ async def test_theme_toggle_persists(tmp_path):
     config = _config(tmp_path)
     app = PentuiApp(config=config)
     async with app.run_test(size=(100, 50)) as pilot:
-        assert app.theme == DEFAULT_THEME
+        assert app.theme == "pentui-dark"  # dark by default
         await pilot.press("f2")
         await pilot.pause()
-        assert app.theme == COLORBLIND_THEME
+        assert app.theme == "pentui-light"  # F2 flips mode
 
-    # Persisted, so a fresh app starts in the chosen theme.
-    assert config.load_settings()["theme"] == COLORBLIND_THEME
+    # Persisted, so a fresh app starts in the chosen mode.
+    assert config.theme_mode() == "light"
     app2 = PentuiApp(config=config)
     async with app2.run_test(size=(100, 50)):
-        assert app2.theme == COLORBLIND_THEME
+        assert app2.theme == "pentui-light"
 
 
 async def test_audit_log_screen_shows_override(tmp_path):

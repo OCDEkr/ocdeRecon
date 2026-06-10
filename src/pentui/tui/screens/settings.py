@@ -13,7 +13,7 @@ from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Input, Label, Static
+from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, Static
 
 from pentui.config import AppConfig
 from pentui.core.registry import ToolRegistry
@@ -34,6 +34,7 @@ class SettingsScreen(Screen[None]):
 
     BINDINGS = [
         ("escape", "app.pop_screen", "Back (discard)"),
+        ("ctrl+s", "save", "Save"),
         ("q", "app.quit", "Quit"),
     ]
 
@@ -53,6 +54,16 @@ class SettingsScreen(Screen[None]):
                 id="root",
             ),
             Static(self._preview(str(current) if current else ""), classes="hint", id="preview"),
+            Label("Appearance"),
+            Checkbox(
+                "Colour-blind-safe palette",
+                value=self.config.palette() == "cb",
+                id="cb",
+            ),
+            Static(
+                "Theme mode (dark/light) toggles with F2.",
+                classes="hint",
+            ),
             classes="field",
             id="body",
         )
@@ -74,10 +85,24 @@ class SettingsScreen(Screen[None]):
     def _live_preview(self, event: Input.Changed) -> None:
         self.query_one("#preview", Static).update(self._preview(event.value))
 
+    @on(Checkbox.Changed, "#cb")
+    def _toggle_palette(self, event: Checkbox.Changed) -> None:
+        # Persist and apply live so the operator sees the palette change at once.
+        self.config.set_palette("cb" if event.value else "standard")
+        from pentui.app import PentuiApp
+
+        if isinstance(self.app, PentuiApp):
+            self.app.apply_theme()
+
+    def action_save(self) -> None:
+        """Keyboard shortcut (Ctrl+S) for the Save button."""
+        self._save()
+
     @on(Button.Pressed, "#save")
     def _save(self) -> None:
         self.config.set_output_root(self.query_one("#root", Input).value)
-        self.notify("Scan output root saved.")
+        self.config.set_palette("cb" if self.query_one("#cb", Checkbox).value else "standard")
+        self.notify("Settings saved.")
         self.app.pop_screen()
 
     @on(Button.Pressed, "#back")

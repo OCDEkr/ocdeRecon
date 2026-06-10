@@ -1,0 +1,26 @@
+# CeWL — crawl a site and generate a custom wordlist for password attacks.
+# The wordlist is an artifact (no parser / model change): point a downstream
+# credential tool's file-input flag at it (file_from / file_input). CeWL takes a
+# single URL per run, passed positionally; feed it a web target URL (e.g. from
+# the query layer's target_urls). No root needed.
+name: cewl
+binary: cewl
+description: "Crawl a site to build a custom wordlist"
+
+target:
+  mode: append            # cewl [options] <url>
+
+output:
+  stream: stdout
+  artifact:
+    flag: "-w"
+    path: "{scan_dir}/wordlist.txt"
+
+options:
+  - {flag: "-d", label: "Crawl depth", type: value, default: "2", placeholder: "e.g. 2"}
+  - {flag: "-m", label: "Minimum word length", type: value, default: "5", placeholder: "e.g. 5"}
+  - {flag: "--with-numbers", label: "Include words with numbers", type: bool}
+  - {flag: "--lowercase", label: "Lowercase all words", type: bool}
+
+profiles:
+  - {name: "Deep", description: "Depth 3, words >= 6 chars", args: ["-d", "3", "-m", "6"]}
