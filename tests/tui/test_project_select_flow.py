@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from textual.widgets import Input, ListView, Select
+from textual.widgets import Input, ListView, SelectionList
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
@@ -31,15 +31,22 @@ def _config_with_kickoff(tmp_path: Path) -> AppConfig:
     (config.user_workflows_dir / "kick.yaml").write_text(
         "name: kick\nsteps:\n  - id: ping\n    tool: echo\n    targets: {from: project}\n"
     )
+    (config.user_workflows_dir / "kick2.yaml").write_text(
+        "name: kick2\nsteps:\n  - id: ping\n    tool: echo\n    targets: {from: project}\n"
+    )
     return config
 
 
-async def _create_engagement(pilot, *, name, targets, kickoff):
-    """Fill the create form (selecting a kickoff workflow) and press Create."""
+async def _create_engagement(pilot, *, name, targets, kickoff, output=""):
+    """Fill the create form (selecting kickoff workflow(s)) and press Create."""
     screen = pilot.app.screen
     screen.query_one("#name", Input).value = name
     screen.query_one("#targets", Input).value = targets
-    screen.query_one("#kickoff", Select).value = kickoff
+    if output:
+        screen.query_one("#output", Input).value = output
+    selection = screen.query_one("#kickoff", SelectionList)
+    for value in [kickoff] if isinstance(kickoff, str) else kickoff:
+        selection.select(value)
     await pilot.pause()
     await pilot.click("#create")
     await pilot.pause()
@@ -53,7 +60,34 @@ async def test_kickoff_workflow_launches_unattended_on_create(tmp_path):
         # The chosen workflow opens on top of the dashboard, in unattended mode.
         assert isinstance(app.screen, WorkflowMonitorScreen)
         assert app.screen.unattended is True
-        assert app.screen.workflow.name == "kick"
+        assert [wf.name for wf in app.screen.workflows] == ["kick"]
+
+
+async def test_multiple_kickoff_workflows_launch_on_create(tmp_path):
+    config = _config_with_kickoff(tmp_path)
+    app = PentuiApp(config=config)
+    async with app.run_test(size=(100, 50)) as pilot:
+        await _create_engagement(
+            pilot, name="recon", targets="10.0.0.0/24", kickoff=["kick", "kick2"]
+        )
+        # Both selected workflows are handed to one monitor (run sequentially).
+        assert isinstance(app.screen, WorkflowMonitorScreen)
+        assert sorted(wf.name for wf in app.screen.workflows) == ["kick", "kick2"]
+
+
+async def test_create_form_output_dir_persists_per_engagement(tmp_path):
+    config = _config(tmp_path)
+    app = PentuiApp(config=config)
+    async with app.run_test(size=(100, 50)) as pilot:
+        screen = pilot.app.screen
+        screen.query_one("#name", Input).value = "scoped"
+        screen.query_one("#output", Input).value = "~/pentests/scoped"
+        await pilot.pause()
+        await pilot.click("#create")
+        await pilot.pause()
+        # Stored on the project row and reflected on the open engagement.
+        assert app.engagement is not None
+        assert app.engagement.output_dir == "~/pentests/scoped"
 
 
 async def test_kickoff_skipped_without_targets(tmp_path):

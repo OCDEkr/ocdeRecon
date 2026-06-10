@@ -58,7 +58,7 @@ class WorkflowMonitorScreen(Screen[None]):
         engagement: Engagement,
         registry: ToolRegistry,
         config: AppConfig,
-        workflow: WorkflowDefinition,
+        workflows: list[WorkflowDefinition],
         *,
         unattended: bool,
         is_root: bool,
@@ -67,14 +67,13 @@ class WorkflowMonitorScreen(Screen[None]):
         self.engagement = engagement
         self.registry = registry
         self.config = config
-        self.workflow = workflow
+        self.workflows = workflows
         self.unattended = unattended
         self.is_root = is_root
 
     def compose(self) -> ComposeResult:
-        mode = "unattended" if self.unattended else "attended"
         yield Header()
-        yield Static(f"Workflow: {self.workflow.name}  ({mode})", id="title")
+        yield Static("", id="title")
         yield DataTable(id="steps")
         yield RichLog(highlight=False, markup=False, wrap=True, id="log")
         yield Footer()
@@ -84,9 +83,17 @@ class WorkflowMonitorScreen(Screen[None]):
         table.add_column("Step", key="step")
         table.add_column("Tool", key="tool")
         table.add_column("Status", key="status")
-        for step in self.workflow.steps:
-            table.add_row(step.id, step.tool, "pending", key=step.id)
         self._run()
+
+    def _show_workflow(self, index: int, workflow: WorkflowDefinition) -> None:
+        """Point the title + steps table at the workflow now running."""
+        mode = "unattended" if self.unattended else "attended"
+        position = f" [{index + 1}/{len(self.workflows)}]" if len(self.workflows) > 1 else ""
+        self.query_one("#title", Static).update(f"Workflow{position}: {workflow.name}  ({mode})")
+        table = self.query_one("#steps", DataTable)
+        table.clear()
+        for step in workflow.steps:
+            table.add_row(step.id, step.tool, "pending", key=step.id)
 
     def action_results(self) -> None:
         from pentui.tui.screens.results import ResultsScreen
@@ -110,32 +117,40 @@ class WorkflowMonitorScreen(Screen[None]):
     @work(exclusive=True)
     async def _run(self) -> None:
         log = self.query_one("#log", RichLog)
+        # One sudo prompt covers the whole batch: ask if *any* workflow needs root.
         sudo_password = None
-        if not self.is_root and workflow_needs_root(self.workflow, self.registry):
+        if not self.is_root and any(
+            workflow_needs_root(wf, self.registry) for wf in self.workflows
+        ):
             sudo_password = await cast("PentuiApp", self.app).request_sudo_password()
             if sudo_password is None:
-                log.write("— root password required; workflow cancelled. —")
+                log.write("— root password required; workflow(s) cancelled. —")
                 return
 
         rules = ScopeRuleRepository(self.engagement.conn).list_for_project(
             self.engagement.project_id
         )
-        engine = WorkflowEngine(
-            self.engagement,
-            self.registry,
-            self.config,
-            scope_rules=rules,
-            unattended=self.unattended,
-            is_root=self.is_root,
-            sudo_password=sudo_password,
-            event_sink=self._on_event,
-            gate_approver=self._approve,
-        )
-        await engine.run(self.workflow)
-        self._announce_done(engine)
+        # Sequential: one engine at a time on the shared engagement connection.
+        failures = 0
+        for index, workflow in enumerate(self.workflows):
+            self._show_workflow(index, workflow)
+            engine = WorkflowEngine(
+                self.engagement,
+                self.registry,
+                self.config,
+                scope_rules=rules,
+                unattended=self.unattended,
+                is_root=self.is_root,
+                sudo_password=sudo_password,
+                event_sink=self._on_event,
+                gate_approver=self._approve,
+            )
+            await engine.run(workflow)
+            failures += self._announce_done(workflow, engine)
+        self._announce_batch_done(failures)
 
-    def _announce_done(self, engine: WorkflowEngine) -> None:
-        """Signal a hands-off operator that the run finished (bell + summary)."""
+    def _announce_done(self, workflow: WorkflowDefinition, engine: WorkflowEngine) -> int:
+        """Log one workflow's per-step summary; return its failed-step count."""
         from pentui.core.workflow import StepState
 
         failed = sum(1 for s in engine.states.values() if s is StepState.ERROR)
@@ -146,14 +161,25 @@ class WorkflowMonitorScreen(Screen[None]):
             parts.append(f"{failed} failed")
         if skipped:
             parts.append(f"{skipped} skipped")
-        summary = f"{self.workflow.name}: {', '.join(parts)}"
+        self.query_one("#log", RichLog).write(f"— {workflow.name} finished ({', '.join(parts)}). —")
+        return failed
+
+    def _announce_batch_done(self, failures: int) -> None:
+        """Signal a hands-off operator that every workflow finished (bell + notify)."""
+        n = len(self.workflows)
+        what = self.workflows[0].name if n == 1 else f"{n} workflows"
+        summary = (
+            f"{what}: {failures} failed step{'s' if failures != 1 else ''}"
+            if failures
+            else (f"{what} finished")
+        )
         self.query_one("#log", RichLog).write(
-            f"— workflow finished ({summary}). Press r for results. —"
+            f"— {'all ' if n > 1 else ''}done ({summary}). Press r for results. —"
         )
         self.app.bell()
         self.notify(
             f"{summary} — press r for results.",
             title="Workflow finished",
-            severity="warning" if failed else "information",
+            severity="warning" if failures else "information",
             timeout=10,
         )
