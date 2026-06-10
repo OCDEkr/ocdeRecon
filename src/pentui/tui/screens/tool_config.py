@@ -40,6 +40,7 @@ from pentui.core.executor import (
 )
 from pentui.core.manifest import (
     OptionType,
+    ToolKind,
     ToolManifest,
     ToolOption,
     ToolProfile,
@@ -92,7 +93,10 @@ class ToolConfigScreen(Screen[None]):
         self.registry = registry
         self.engagement = engagement
         self.config = config or AppConfig()
-        self.manifest: ToolManifest | None = registry.all()[0] if registry.all() else None
+        # REST tools (e.g. Nessus) run via workflows, not ad-hoc manual scans, so
+        # they're excluded from this screen's tool list.
+        self._manual_tools = [m for m in registry.all() if m.kind is not ToolKind.REST]
+        self.manifest: ToolManifest | None = self._manual_tools[0] if self._manual_tools else None
         self._option_widgets: list[tuple[ToolOption, Checkbox | Input | Select[str]]] = []
 
     def compose(self) -> ComposeResult:
@@ -104,7 +108,7 @@ class ToolConfigScreen(Screen[None]):
             )
             yield Footer()
             return
-        tool_opts = [(name, name) for name in self.registry.names()]
+        tool_opts = [(m.name, m.name) for m in self._manual_tools]
         yield Horizontal(
             Label("Tool:"),
             Select(tool_opts, value=self.manifest.name, allow_blank=False, id="tool"),

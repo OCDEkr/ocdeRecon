@@ -16,13 +16,17 @@ just composes it.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from pentui.config import AppConfig, NessusSettings
 from pentui.core.executor import ExecutorError, build_runs, preview, run_command
 from pentui.core.manifest import ToolKind, ToolManifest, ToolProfile
+from pentui.core.nessus_client import OK_STATUSES, NessusClient, NessusError
 
 #: A raw output line for display; the engine adds any prefix and routes it.
 OnLine = Callable[[str], None]
@@ -133,10 +137,101 @@ class ProcessRunner:
         )
 
 
-def get_runner(manifest: ToolManifest) -> ToolRunner:
-    """The runner for a manifest, chosen by its ``kind``."""
-    if manifest.kind is ToolKind.REST:
-        raise NotImplementedError(
-            f"{manifest.name!r}: REST tool execution is not available yet (Phase C)"
+#: Builds the real Nessus client (TLS verification off for the self-signed
+#: localhost cert). Swapped out in tests via the RestRunner client factory.
+def _make_nessus_client(settings: NessusSettings) -> NessusClient:
+    import httpx
+
+    assert settings.access_key is not None and settings.secret_key is not None
+    http = httpx.AsyncClient(base_url=settings.url, verify=False, timeout=30.0)  # noqa: S501
+    return NessusClient(settings.url, settings.access_key, settings.secret_key, http)
+
+
+ClientFactory = Callable[[NessusSettings], NessusClient]
+
+
+class RestRunner:
+    """Runs a scan via an HTTP API instead of a subprocess (Nessus today).
+
+    The engine treats it exactly like ProcessRunner — same scan rows, scope
+    filtering (targets are pre-filtered before we ever get here), event stream,
+    artifact, and parsing. The artifact is the exported ``.nessus`` file, parsed
+    by the ``nessus`` parser into the unified model.
+    """
+
+    def __init__(self, config: AppConfig, *, client_factory: ClientFactory | None = None) -> None:
+        self.config = config
+        self._client_factory = client_factory or _make_nessus_client
+
+    def prepare(self, req: RunRequest) -> RunPlan:
+        artifact_path = str(req.scan_dir / "nessus.nessus")
+        n = len(req.targets)
+        settings = self.config.nessus_settings()
+        return RunPlan(
+            command_str=f"[nessus REST] scan {n} target(s) via {settings.url}",
+            args=[],
+            artifact_path=artifact_path,
         )
+
+    async def execute(
+        self, req: RunRequest, plan: RunPlan, *, on_line: OnLine, on_marker: OnMarker
+    ) -> RunResult:
+        settings = self.config.nessus_settings()
+        log_path = req.scan_dir / "stdout.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not settings.configured:
+            on_marker(
+                "✗ Nessus API keys not set — add them to settings.json under 'nessus' "
+                "or set NESSUS_ACCESS_KEY / NESSUS_SECRET_KEY."
+            )
+            log_path.write_text("Nessus API keys not configured.\n")
+            return RunResult(ok=False, exit_code=None, raw_output_path=str(log_path))
+
+        client = self._client_factory(settings)
+        scan_id: int | None = None
+        ok = False
+        with log_path.open("w", encoding="utf-8") as log:
+
+            def emit(line: str) -> None:
+                on_line(line)
+                log.write(line + "\n")
+
+            on_marker(plan.command_str)
+            try:
+                scan_id = await client.launch(req.targets, name=f"pentui {req.scan_dir.name}")
+                emit(f"launched Nessus scan {scan_id}")
+                status = await client.wait(scan_id, on_status=lambda s: emit(f"status: {s}"))
+                emit(f"scan finished: {status}")
+                if status in OK_STATUSES:
+                    await client.export_nessus(scan_id, plan.artifact_path or "")
+                    emit(f"exported results to {plan.artifact_path}")
+                    ok = True
+                else:
+                    emit(f"scan did not complete cleanly ({status}); nothing to parse")
+            except asyncio.CancelledError:
+                if scan_id is not None:
+                    with contextlib.suppress(Exception):
+                        await client.stop(scan_id)
+                raise
+            except NessusError as exc:
+                on_marker(f"✗ {exc}")
+                emit(f"error: {exc}")
+            finally:
+                with contextlib.suppress(Exception):
+                    await client.aclose()
+
+        return RunResult(ok=ok, exit_code=0 if ok else 1, raw_output_path=str(log_path))
+
+
+def get_runner(manifest: ToolManifest, config: AppConfig | None = None) -> ToolRunner:
+    """The runner for a manifest, chosen by its ``kind``.
+
+    ``config`` is required for REST tools (they read connection settings from it);
+    process tools ignore it.
+    """
+    if manifest.kind is ToolKind.REST:
+        if config is None:
+            raise ExecutorError(f"{manifest.name!r}: REST tools require app config")
+        return RestRunner(config)
     return ProcessRunner()

@@ -15,6 +15,19 @@ from typing import Any
 APP_NAME = "pentui"
 
 
+@dataclass(slots=True)
+class NessusSettings:
+    """Connection details for a local Nessus instance (REST API)."""
+
+    url: str
+    access_key: str | None
+    secret_key: str | None
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.access_key and self.secret_key)
+
+
 def _xdg_dir(env_var: str, default: Path) -> Path:
     value = os.environ.get(env_var)
     return Path(value) if value else default
@@ -113,6 +126,41 @@ class AppConfig:
     def save_settings(self, settings: dict[str, Any]) -> None:
         self.settings_file.parent.mkdir(parents=True, exist_ok=True)
         self.settings_file.write_text(json.dumps(settings, indent=2))
+
+    def nessus_settings(self) -> NessusSettings:
+        """Local Nessus connection details for the REST runner.
+
+        Read from ``settings.json`` under the ``nessus`` key, with environment
+        overrides (``NESSUS_URL`` / ``NESSUS_ACCESS_KEY`` / ``NESSUS_SECRET_KEY``)
+        taking precedence. Keys live outside the repo and are never committed.
+        Defaults to the standard local endpoint ``https://localhost:8834``.
+        """
+        raw = self.load_settings().get("nessus")
+        stored = raw if isinstance(raw, dict) else {}
+        url = os.environ.get("NESSUS_URL") or stored.get("url") or "https://localhost:8834"
+        access = os.environ.get("NESSUS_ACCESS_KEY") or stored.get("access_key") or None
+        secret = os.environ.get("NESSUS_SECRET_KEY") or stored.get("secret_key") or None
+        return NessusSettings(url=str(url), access_key=access, secret_key=secret)
+
+    def set_nessus_settings(
+        self,
+        *,
+        url: str | None = None,
+        access_key: str | None = None,
+        secret_key: str | None = None,
+    ) -> None:
+        """Persist Nessus connection details (only the provided fields)."""
+        settings = self.load_settings()
+        raw = settings.get("nessus")
+        nessus: dict[str, Any] = raw if isinstance(raw, dict) else {}
+        if url is not None:
+            nessus["url"] = url
+        if access_key is not None:
+            nessus["access_key"] = access_key
+        if secret_key is not None:
+            nessus["secret_key"] = secret_key
+        settings["nessus"] = nessus
+        self.save_settings(settings)
 
     def output_root(self) -> Path | None:
         """Configurable base dir for scan output (the "pentests" folder), under

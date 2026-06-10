@@ -1,0 +1,16 @@
+# nessus-scan — run a Nessus vulnerability scan over the engagement's targets.
+#
+# Nessus does its own host discovery, so this is a single REST step over the
+# in-scope project targets; the exported .nessus is parsed into hosts/ports and
+# severity-rated findings, browsable in results and included in reports.
+#
+# Needs Nessus running locally with API keys configured (settings.json 'nessus'
+# or NESSUS_* env). Scope still applies — out-of-scope targets are dropped before
+# anything is sent to Nessus.
+name: nessus-scan
+description: "Nessus vulnerability scan (local REST API) over the engagement targets"
+
+steps:
+  - id: scan
+    tool: nessus
+    targets: {from: project}

@@ -43,7 +43,7 @@ async def test_ctrl_r_runs_scan(tmp_path):
     config = _config(tmp_path)
     app = PentuiApp(config=config)
     async with app.run_test(size=(100, 50)) as pilot:
-        await start_engagement(pilot, name="kbdrun")  # lands on ToolConfigScreen
+        await start_engagement(pilot, name="kbdrun", tool="echo")  # lands on ToolConfigScreen
         app.screen.query_one("#targets", Input).value = "hello world"
         await pilot.pause()
         await pilot.press("ctrl+r")  # Run scan via keyboard
