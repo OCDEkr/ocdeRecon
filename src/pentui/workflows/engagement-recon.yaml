@@ -5,12 +5,16 @@
 #   scan        : nmap once per /24 with live hosts (whole CIDR), one XML per subnet
 #   shots       : gowitness across all the per-/24 nmap XMLs (file_from handoff)
 #   dc-identify : tag Active Directory DCs among the LDAP responders
-#   smb-sweep   : record SMB signing state for the :445 hosts
-#   relay       : (gated) stage the signing-disabled hosts for NTLM relay
+#   smb-sweep   : record SMB signing state for the :445 hosts (recon for later stages)
+#
+# Recon-only: this chain enumerates and tags, it does not attack. smb-sweep keeps
+# the SMB signing/host info (and the --gen-relay-list side artifact) for later
+# stages, but no NTLM relay runs here — launch the standalone `unsigned-relay`
+# workflow when you actually want to relay.
 #
 # Everything after `scan` reads the unified model the one nmap already merged — no
-# host is scanned twice. Replaces running subnet-recon + dc-discovery + web-recon +
-# unsigned-relay separately at engagement start (those stay for ad-hoc use). Set the
+# host is scanned twice. Replaces running subnet-recon + dc-discovery + web-recon
+# separately at engagement start (those stay for ad-hoc use). Set the
 # engagement's targets/scope, then kick this off on create. Per-/24 nmap scans run
 # bounded-parallel (`max_parallel`); excluded scope is honored via the engine's
 # engagement-wide --excludefile, so excluded IPs inside a scanned /24 are skipped.
@@ -52,10 +56,3 @@ steps:
     profile: "Signing sweep"
     after: [scan]
     input: {from: hosts, where: {port_open_in: [445]}, as: ip_list}
-
-  - id: relay
-    tool: ntlmrelayx
-    profile: Relay
-    after: [smb-sweep]
-    gate: true
-    input: {from: hosts, where: {smb_signing_in: ["disabled"]}, as: ip_list}

@@ -129,8 +129,9 @@ def test_shipped_engagement_recon_workflow_is_valid():
         "shots",
         "dc-identify",
         "smb-sweep",
-        "relay",
     ]
+    # Recon-only: enumerates and tags, no relay/attack step.
+    assert "ntlmrelayx" not in {s.tool for s in wf.steps}
     # One masscan + one nmap; downstream branches all hang off the single nmap scan.
     assert wf.steps[0].tool == "masscan"
     scan = wf.steps[1]
@@ -141,5 +142,3 @@ def test_shipped_engagement_recon_workflow_is_valid():
     for sid in ("dc-identify", "smb-sweep"):
         step = next(s for s in wf.steps if s.id == sid)
         assert step.after == ["scan"] and step.input is not None
-    relay = next(s for s in wf.steps if s.id == "relay")
-    assert relay.gate is True and relay.after == ["smb-sweep"]
