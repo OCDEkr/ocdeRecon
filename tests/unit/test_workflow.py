@@ -55,19 +55,18 @@ def test_duplicate_ids_rejected():
         _wf([{"id": "a", "tool": "x"}, {"id": "a", "tool": "y"}])
 
 
-def test_packaged_web_recon_loads_and_validates():
-    wf = load_workflow(PACKAGED_WORKFLOWS_DIR / "web-recon.yaml")
-    assert wf.name == "web-recon"
+def test_packaged_engagement_recon_loads_and_validates():
+    wf = load_workflow(PACKAGED_WORKFLOWS_DIR / "engagement-recon.yaml")
+    assert wf.name == "engagement-recon"
     ids = {s.id for s in wf.steps}
-    assert ids == {"discover", "web-shots", "service-scan"}
-    shots = next(s for s in wf.steps if s.id == "web-shots")
-    assert shots.input is not None
-    assert shots.input.as_.value == "target_urls"
-    service = next(s for s in wf.steps if s.id == "service-scan")
-    assert service.gate is True
+    assert ids == {"discover", "scan", "shots", "dc-identify", "smb-sweep", "relay"}
+    shots = next(s for s in wf.steps if s.id == "shots")
+    assert shots.file_from is not None and shots.file_from.step == "scan"
+    relay = next(s for s in wf.steps if s.id == "relay")
+    assert relay.gate is True
 
 
-def test_workflow_registry_has_web_recon():
+def test_workflow_registry_has_engagement_recon():
     registry = build_workflow_registry()
-    assert "web-recon" in registry.names()
+    assert "engagement-recon" in registry.names()
     assert registry.errors == []

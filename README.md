@@ -36,7 +36,8 @@ can **save a configured scan as a named profile** (written to
 file-input option (e.g. gowitness `-f`) at a **directory** runs the tool once per
 matching file. Workflows can **fan out per /24** (`foreach: subnet/24`) and hand a
 downstream tool the **collected artifacts** of an upstream step (`file_from`) —
-see the shipped `subnet-recon` workflow (masscan → per-/24 nmap → gowitness),
+see the shipped `engagement-recon` workflow (masscan → per-/24 nmap → gowitness,
+then dc-discovery/smb/relay branches off the one nmap),
 whose per-/24 nmap scans run **bounded-parallel** (`max_parallel`, else
 `max_concurrent_scans`, default 4). Creating an engagement can **auto-launch a
 workflow unattended** via the *"Run workflow on create"* dropdown (set initial

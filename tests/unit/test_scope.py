@@ -41,6 +41,29 @@ def test_exclude_overrides_include():
     assert "exclude" in blocked.reason
 
 
+def test_range_containing_an_excluded_ip_stays_in_scope():
+    # A single excluded /32 must not void the whole including range — the range is
+    # scanned with the excluded IP carved out at scan time, not skipped outright.
+    checker = ScopeChecker(
+        _rules(("192.168.0.0/16", ScopeKind.INCLUDE), ("192.168.15.114", ScopeKind.EXCLUDE))
+    )
+    assert checker.classify("192.168.0.0/16").status is ScopeStatus.IN_SCOPE
+    assert checker.classify("192.168.15.0/24").status is ScopeStatus.IN_SCOPE
+    # …while the excluded address itself, and any range wholly inside the exclude,
+    # are still out of scope.
+    assert checker.classify("192.168.15.114").status is ScopeStatus.OUT_OF_SCOPE
+
+
+def test_range_wholly_inside_an_exclude_is_blocked():
+    checker = ScopeChecker(
+        _rules(("10.0.0.0/8", ScopeKind.INCLUDE), ("10.1.0.0/16", ScopeKind.EXCLUDE))
+    )
+    # A /24 entirely within the excluded /16 is blocked …
+    assert checker.classify("10.1.2.0/24").status is ScopeStatus.OUT_OF_SCOPE
+    # … but a sibling /16 that only borders it is fine.
+    assert checker.classify("10.2.0.0/16").status is ScopeStatus.IN_SCOPE
+
+
 def test_hostname_scope_by_exact_match():
     checker = ScopeChecker(
         _rules(("app.example", ScopeKind.INCLUDE), ("admin.example", ScopeKind.EXCLUDE))

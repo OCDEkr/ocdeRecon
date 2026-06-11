@@ -77,7 +77,7 @@ def _nmap_args(eng) -> list[str]:
 
 async def test_exclude_file_written_and_injected(tmp_path):
     config, registry, eng = _setup(tmp_path, with_exclude_flag=True)
-    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.5")
+    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.0/24")
     rules = ScopeRuleRepository(eng.conn)
     rules.create(eng.project_id, "10.0.0.0/24", ScopeKind.INCLUDE)
     rules.create(eng.project_id, "10.0.0.50", ScopeKind.EXCLUDE)
@@ -96,7 +96,7 @@ async def test_exclude_file_written_and_injected(tmp_path):
 
 async def test_no_exclude_rules_means_no_file_and_no_flag(tmp_path):
     config, registry, eng = _setup(tmp_path, with_exclude_flag=True)
-    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.5")
+    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.0/24")
     ScopeRuleRepository(eng.conn).create(eng.project_id, "10.0.0.0/24", ScopeKind.INCLUDE)
 
     await WorkflowEngine(eng, registry, config, scope_rules=_scope(eng), unattended=True).run(_WF)
@@ -108,7 +108,7 @@ async def test_no_exclude_rules_means_no_file_and_no_flag(tmp_path):
 async def test_tool_without_exclude_flag_is_not_injected(tmp_path):
     # Same excluded scope, but the manifest declares no exclude_flag.
     config, registry, eng = _setup(tmp_path, with_exclude_flag=False)
-    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.5")
+    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.0/24")
     rules = ScopeRuleRepository(eng.conn)
     rules.create(eng.project_id, "10.0.0.0/24", ScopeKind.INCLUDE)
     rules.create(eng.project_id, "10.0.0.50", ScopeKind.EXCLUDE)

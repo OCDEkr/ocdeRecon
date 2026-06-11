@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pentui.config import AppConfig
 from pentui.core.registry import ToolRegistry
-from pentui.core.workflow import WorkflowDefinition, WorkflowEngine, build_workflow_registry
+from pentui.core.workflow import WorkflowDefinition, WorkflowEngine
 from pentui.persistence.engagement import open_engagement
 from pentui.persistence.repositories import HostRepository, TargetRepository
 
@@ -117,13 +117,3 @@ async def test_only_unsigned_hosts_are_staged_for_relay(tmp_path):
     ]
     assert len(relay_targets) == 1
     assert relay_targets[0].read_text().split() == ["10.0.0.1"]
-
-
-def test_shipped_unsigned_relay_workflow_is_valid():
-    wf = build_workflow_registry().get("unsigned-relay")
-    assert wf is not None
-    assert [s.id for s in wf.steps] == ["discover", "finger", "relay"]
-    assert wf.steps[1].tool == "smb-enum"
-    relay = wf.steps[-1]
-    assert relay.tool == "ntlmrelayx" and relay.gate is True
-    assert relay.input is not None and relay.input.where.smb_signing_in == ["disabled"]
