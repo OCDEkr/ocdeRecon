@@ -7,7 +7,11 @@ skip-and-log (even when unattended).
 
 Rules and targets may be IPs, CIDR ranges, or hostnames. IP/CIDR targets are
 checked with the stdlib ``ipaddress`` module (a target network must sit entirely
-within an include range and not overlap any exclude). Hostnames match a rule
+within an include range and not sit entirely within an exclude). A target that
+*contains* a smaller excluded range stays in scope — it's an in-scope range with
+a carve-out hole, honored at scan time via ``--excludefile`` and by filtering the
+individual hosts it yields — so one excluded ``/32`` never voids a whole ``/16``.
+Hostnames match a rule
 exactly OR as a subdomain of it — an include/exclude of ``example.com`` covers
 ``www.example.com`` (but not ``notexample.com``). This lets domain scoping work
 with dynamically discovered subdomains (e.g. sublist3r). No DNS resolution is
@@ -59,14 +63,6 @@ def _subnet_of(a: Network, b: Network) -> bool:
     return False
 
 
-def _overlaps(a: Network, b: Network) -> bool:
-    if isinstance(a, ipaddress.IPv4Network) and isinstance(b, ipaddress.IPv4Network):
-        return a.overlaps(b)
-    if isinstance(a, ipaddress.IPv6Network) and isinstance(b, ipaddress.IPv6Network):
-        return a.overlaps(b)
-    return False
-
-
 class ScopeChecker:
     """Classifies targets against a project's include/exclude rules."""
 
@@ -97,9 +93,16 @@ class ScopeChecker:
         return self._classify_host(target)
 
     def _classify_network(self, target: str, net: Network) -> ScopeDecision:
+        # Two IP networks are always either disjoint or nested. Block only when the
+        # target sits *wholly inside* an exclude — a target that merely *contains*
+        # an excluded subnet (e.g. a /16 with one excluded /32) is an in-scope range
+        # with a carve-out hole, not an out-of-scope target. The hole is honored at
+        # scan time: nmap/masscan get the excluded ranges via --excludefile, and
+        # downstream tools operate on discovered hosts, which are individually
+        # filtered here. Blocking the whole range would (wrongly) skip everything.
         for ex in self.exclude_nets:
-            if _overlaps(net, ex):
-                return ScopeDecision(target, ScopeStatus.OUT_OF_SCOPE, f"overlaps exclude {ex}")
+            if _subnet_of(net, ex):
+                return ScopeDecision(target, ScopeStatus.OUT_OF_SCOPE, f"within exclude {ex}")
         for inc in self.include_nets:
             if _subnet_of(net, inc):
                 return ScopeDecision(target, ScopeStatus.IN_SCOPE, f"within include {inc}")
