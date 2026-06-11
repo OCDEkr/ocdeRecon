@@ -42,6 +42,10 @@ steps:
   - id: shots
     tool: gowitness
     profile: "Scan from nmap XML"
+    # Screenshot only open web services from the nmap XML, persist shots + DB, and
+    # bound concurrency/per-target time. Set on the step (not the profile) so the
+    # manual scan form's option defaults aren't doubled.
+    options: {"--write-screenshots": true, "--log-scan-errors": true, "--open-only": true, "--write-db": true, "--threads": "16", "--timeout": "15"}
     after: [scan]
     file_from: {step: scan, flag: "-f"}   # gowitness -f <dir of per-/24 nmap XMLs>
     gate: false

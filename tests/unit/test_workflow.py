@@ -62,6 +62,9 @@ def test_packaged_engagement_recon_loads_and_validates():
     assert ids == {"discover", "scan", "shots", "dc-identify", "smb-sweep"}
     shots = next(s for s in wf.steps if s.id == "shots")
     assert shots.file_from is not None and shots.file_from.step == "scan"
+    # gowitness screenshots only open web services, persisting shots + DB.
+    assert shots.options.get("--open-only") is True
+    assert shots.options.get("--write-screenshots") is True
     # The nmap scan runs at T4 (workflow steps don't inherit the manifest default).
     scan = next(s for s in wf.steps if s.id == "scan")
     assert scan.options.get("-T") == "4"
