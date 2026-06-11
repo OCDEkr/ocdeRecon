@@ -144,7 +144,7 @@ nmapTUI/
     tools/                   # shipped tool manifests (bundled in the package)
       nmap.yaml
     workflows/               # shipped workflow definitions (bundled)
-      web-recon.yaml
+      engagement-recon.yaml
   tests/
     unit/                    # core logic, parsers, scope, query, workflow engine
     tui/                     # Textual Pilot-driven UI tests

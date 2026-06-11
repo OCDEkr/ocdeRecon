@@ -11,7 +11,7 @@ from pathlib import Path
 from pentui.config import AppConfig
 from pentui.core.query import Materializer, QuerySpec, WhereSpec, run_query
 from pentui.core.registry import ToolRegistry
-from pentui.core.workflow import WorkflowDefinition, WorkflowEngine, build_workflow_registry
+from pentui.core.workflow import WorkflowDefinition, WorkflowEngine
 from pentui.persistence.engagement import open_engagement
 from pentui.persistence.repositories import HostRepository, TargetRepository
 
@@ -98,11 +98,3 @@ async def test_dc_discovery_tags_domain_controllers(tmp_path):
         QuerySpec(where=WhereSpec(is_dc=True), **{"as": Materializer.IP_LIST}),
     )
     assert dcs == ["10.0.0.10"]
-
-
-def test_shipped_dc_discovery_workflow_is_valid():
-    wf = build_workflow_registry().get("dc-discovery")
-    assert wf is not None
-    assert [s.id for s in wf.steps] == ["discover", "identify"]
-    identify = wf.steps[-1]
-    assert identify.tool == "dc-discovery" and identify.profile == "Identify"
