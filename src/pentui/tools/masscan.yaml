@@ -29,5 +29,5 @@ options:
 
 profiles:
   - {name: "Common web", description: "Web ports at a modest rate", args: ["-p80,443,8080,8443", "--rate", "1000"]}
-  - {name: "Top TCP", description: "Common service ports", args: ["-p21,22,25,80,139,443,445,3389", "--rate", "1000"]}
+  - {name: "Top TCP", description: "Common service ports", args: ["-p21,22,25,80,139,443,445,3389", "--rate", "10000"]}
   - {name: "Full TCP", description: "All TCP ports (use a sane rate)", args: ["-p0-65535", "--rate", "1000"]}

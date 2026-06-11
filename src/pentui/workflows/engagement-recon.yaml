@@ -33,6 +33,7 @@ steps:
   - id: scan
     tool: nmap
     profile: "Service scan"
+    options: {"-T": "4"}          # T4 timing (workflow steps don't apply the manifest default)
     after: [discover]
     foreach: subnet/24            # one nmap per /24 that masscan found hosts in
     foreach_target: subnet        # scan the whole /24 (catches masscan misses)
