@@ -121,6 +121,7 @@ class ToolConfigScreen(Screen[None]):
             Input(placeholder="e.g. 10.0.0.0/24 scanme.example", id="targets"),
             classes="field",
         )
+        yield Static("↑/↓ move between fields", classes="hint")
         # Build the manifest-driven option widgets here in compose (mounting a
         # Select dynamically races with its own overlay setup, so we never do
         # that during on_mount — tool switches go through recompose() instead).

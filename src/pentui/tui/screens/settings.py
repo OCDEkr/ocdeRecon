@@ -48,6 +48,7 @@ class SettingsScreen(Screen[None]):
         current = self.config.output_root()
         nessus = self.config.nessus_settings()
         yield VerticalScroll(
+            Label("Settings (↑/↓ move between fields):"),
             Label("Scan output root"),
             Input(
                 value=str(current) if current else "",
