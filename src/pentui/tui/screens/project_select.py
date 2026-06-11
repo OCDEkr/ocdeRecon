@@ -80,7 +80,7 @@ class ProjectSelectScreen(Screen[None]):
         # so engagements created this session show up when we return here.
         yield ListView(id="existing")
         with Vertical(id="new"):
-            yield Label("New engagement")
+            yield Label("New engagement (↑/↓ move between fields):")
             yield Input(placeholder="name (letters, digits, - or _)", id="name", classes="field")
             yield Input(placeholder="client (optional)", id="client", classes="field")
             yield Input(

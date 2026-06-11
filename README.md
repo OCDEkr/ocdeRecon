@@ -45,6 +45,10 @@ targets first); the monitor bells + notifies when the chain finishes. A
 running scan or workflow step can be stopped with `s`. Shipped tool manifests: nmap, masscan,
 nslookup, gowitness, nxc, responder, ntlmrelayx, mitm6, nessus.
 
+The UI is keyboard-first: `↑`/`↓` move focus between fields (so you can jump back
+to an earlier textbox without Tab-cycling), while `Tab`/`Shift+Tab` still work and
+lists/tables/trees keep their native arrow navigation.
+
 ## Quick start (development)
 
 ```bash
