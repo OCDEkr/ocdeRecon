@@ -59,11 +59,12 @@ def test_packaged_engagement_recon_loads_and_validates():
     wf = load_workflow(PACKAGED_WORKFLOWS_DIR / "engagement-recon.yaml")
     assert wf.name == "engagement-recon"
     ids = {s.id for s in wf.steps}
-    assert ids == {"discover", "scan", "shots", "dc-identify", "smb-sweep", "relay"}
+    assert ids == {"discover", "scan", "shots", "dc-identify", "smb-sweep"}
     shots = next(s for s in wf.steps if s.id == "shots")
     assert shots.file_from is not None and shots.file_from.step == "scan"
-    relay = next(s for s in wf.steps if s.id == "relay")
-    assert relay.gate is True
+    # The nmap scan runs at T4 (workflow steps don't inherit the manifest default).
+    scan = next(s for s in wf.steps if s.id == "scan")
+    assert scan.options.get("-T") == "4"
 
 
 def test_workflow_registry_has_engagement_recon():
