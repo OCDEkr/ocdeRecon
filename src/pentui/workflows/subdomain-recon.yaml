@@ -20,5 +20,6 @@ steps:
   - id: scan
     tool: nmap
     profile: "Service scan"
+    options: {"-T": "4"}          # T4 timing (workflow steps don't apply the manifest default)
     after: [enum]
     input: {from: hosts, where: {hostname_matches: "."}, as: targets}
