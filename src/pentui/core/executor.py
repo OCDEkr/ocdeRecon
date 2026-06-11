@@ -137,6 +137,10 @@ def build_argv(
     argv: list[str] = ["sudo", "-S", "-p", ""] if sudo else []
     argv.append(manifest.binary)
 
+    # Always-on args (e.g. verbosity) come right after the binary so they apply to
+    # every run regardless of profile/options.
+    argv.extend(manifest.base_args)
+
     if profile is not None:
         argv.extend(profile.args)
 

@@ -58,6 +58,24 @@ def test_build_runs_single_without_file_input():
     assert len(runs) == 1 and runs[0][0] == ""
 
 
+def test_base_args_come_right_after_binary_before_profile_and_targets():
+    from pentui.core.manifest import ToolProfile
+
+    manifest = ToolManifest(
+        name="nmap",
+        binary="nmap",
+        base_args=["-v", "--stats-every", "30s"],
+        profiles=[ToolProfile(name="Quick", args=["-F"])],
+    )
+    argv = build_argv(manifest, profile=manifest.profile("Quick"), targets=["10.0.0.0/24"])
+    assert argv == ["nmap", "-v", "--stats-every", "30s", "-F", "10.0.0.0/24"]
+
+
+def test_base_args_default_empty_is_a_no_op():
+    argv = build_argv(ToolManifest(name="t", binary="echo"), targets=["x"])
+    assert argv == ["echo", "x"]
+
+
 @pytest.fixture
 def nmap():
     return load_manifest(PACKAGED_TOOLS_DIR / "nmap.yaml")

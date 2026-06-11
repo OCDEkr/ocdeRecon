@@ -6,6 +6,11 @@ binary: nmap                       # resolved on PATH; presence checked at load
 description: "Network mapper / port & service scanner"
 version_check: ["nmap", "--version"]
 
+# Always verbose + a periodic progress/ETA line. Without these nmap prints almost
+# nothing to stdout until a scan finishes, so a long scan over a large range looks
+# hung in the live monitor. The XML artifact (parsed) is unaffected by verbosity.
+base_args: ["-v", "--stats-every", "30s"]
+
 target:
   mode: append                     # append | flag  (how targets enter the argv)
   # flag: "-iL"                    # if mode: flag, write a target file and pass it

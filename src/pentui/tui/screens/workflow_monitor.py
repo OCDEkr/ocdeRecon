@@ -7,11 +7,13 @@ output in a log. Approval gates surface here as a modal (attended runs only).
 from __future__ import annotations
 
 import contextlib
+from datetime import datetime
 from typing import TYPE_CHECKING, cast
 
 from textual import work
 from textual.app import ComposeResult
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import DataTable, Footer, Header, RichLog, Static
 
 from pentui.config import AppConfig
@@ -40,6 +42,9 @@ class WorkflowMonitorScreen(Screen[None]):
     #steps { height: auto; max-height: 40%; border: round $panel; margin: 0 1; }
     RichLog { height: 1fr; border: round $panel; margin: 0 1; }
     """
+
+    #: Braille spinner frames animated on the running step as a liveness heartbeat.
+    _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
     BINDINGS = [
         ("s", "stop", "Stop"),
@@ -70,6 +75,11 @@ class WorkflowMonitorScreen(Screen[None]):
         self.workflows = workflows
         self.unattended = unattended
         self.is_root = is_root
+        self._spin: Timer | None = None
+        self._spin_frame = 0
+        #: The step currently animated as "running" (None when nothing is running).
+        self._running_step: str | None = None
+        self._running_since: datetime | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -83,6 +93,9 @@ class WorkflowMonitorScreen(Screen[None]):
         table.add_column("Step", key="step")
         table.add_column("Tool", key="tool")
         table.add_column("Status", key="status")
+        # A long, quiet step (e.g. nmap before it prints anything) must still read
+        # as alive — animate the running step's status cell on a timer.
+        self._spin = self.set_interval(0.5, self._tick)
         self._run()
 
     def _show_workflow(self, index: int, workflow: WorkflowDefinition) -> None:
@@ -90,10 +103,25 @@ class WorkflowMonitorScreen(Screen[None]):
         mode = "unattended" if self.unattended else "attended"
         position = f" [{index + 1}/{len(self.workflows)}]" if len(self.workflows) > 1 else ""
         self.query_one("#title", Static).update(f"Workflow{position}: {workflow.name}  ({mode})")
+        self._running_step = None  # the previous workflow's running step is gone
         table = self.query_one("#steps", DataTable)
         table.clear()
         for step in workflow.steps:
             table.add_row(step.id, step.tool, "pending", key=step.id)
+
+    def _tick(self) -> None:
+        """Animate the running step's status so a quiet step doesn't look hung."""
+        if self._running_step is None:
+            return
+        frame = self._SPINNER[self._spin_frame % len(self._SPINNER)]
+        self._spin_frame += 1
+        elapsed = ""
+        if self._running_since is not None:
+            secs = int((datetime.now() - self._running_since).total_seconds())
+            elapsed = f"  ({secs // 60}:{secs % 60:02d})"
+        with contextlib.suppress(Exception):
+            table = self.query_one("#steps", DataTable)
+            table.update_cell(self._running_step, "status", f"running {frame}{elapsed}")
 
     def action_results(self) -> None:
         from pentui.tui.screens.results import ResultsScreen
@@ -102,6 +130,13 @@ class WorkflowMonitorScreen(Screen[None]):
 
     def _on_event(self, event: WorkflowEvent) -> None:
         if event.kind == "status" and event.step_id:
+            if event.detail == "running":
+                # Hand this step to the heartbeat; _tick animates it from here.
+                self._running_step = event.step_id
+                self._running_since = datetime.now()
+            elif event.step_id == self._running_step:
+                # done / error / skipped — stop animating; show the final state.
+                self._running_step = None
             table = self.query_one("#steps", DataTable)
             with contextlib.suppress(KeyError):
                 table.update_cell(event.step_id, "status", event.detail)

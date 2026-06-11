@@ -114,6 +114,10 @@ class ToolManifest(BaseModel):
     #: True when the tool always needs root (raw sockets, privileged binds, …),
     #: regardless of which options/profile are selected.
     requires_root: bool = False
+    #: Args always prepended (after the binary, before profile/options/targets) on
+    #: every run, manual or workflow — e.g. verbosity flags so a long, otherwise
+    #: silent tool streams progress. Keep these order-independent and parser-safe.
+    base_args: list[str] = Field(default_factory=list)
     target: TargetSpec = Field(default_factory=TargetSpec)
     output: OutputSpec = Field(default_factory=OutputSpec)
     options: list[ToolOption] = Field(default_factory=list)
