@@ -20,6 +20,7 @@ import ipaddress
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from pentui.core.models import ScopeKind, ScopeRule
 
@@ -129,3 +130,20 @@ class ScopeChecker:
 def classify_targets(rules: Iterable[ScopeRule], targets: Iterable[str]) -> list[ScopeDecision]:
     checker = ScopeChecker(rules)
     return [checker.classify(t) for t in targets]
+
+
+def write_exclude_file(rules: Iterable[ScopeRule], path: Path) -> Path | None:
+    """Write the engagement's exclude rules (one value per line) to ``path``.
+
+    Returns ``path`` when at least one exclude rule exists (file written), else
+    ``None`` (no file created). The result feeds tools that accept an
+    ``--excludefile`` — the second line of defence behind ``classify_targets``,
+    needed because a per-/24 fan-out scans a whole in-scope CIDR and would
+    otherwise sweep excluded IPs sitting inside it.
+    """
+    excludes = [r.value for r in rules if r.kind is ScopeKind.EXCLUDE]
+    if not excludes:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(excludes) + "\n")
+    return path

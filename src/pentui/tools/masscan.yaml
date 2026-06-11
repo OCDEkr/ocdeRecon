@@ -6,6 +6,10 @@ binary: masscan
 description: "Fast asynchronous TCP port scanner"
 requires_root: true
 
+# Excluded scope rules are written to one engagement-wide excludes.txt and injected
+# as `--excludefile <path>` on every run (masscan supports this natively).
+exclude_flag: "--excludefile"
+
 target:
   mode: append
 

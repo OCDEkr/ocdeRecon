@@ -75,6 +75,12 @@ class AppConfig:
     def engagement_db_path(self, name: str) -> Path:
         return self.engagement_dir(name) / "engagement.db"
 
+    def engagement_exclude_file(self, name: str) -> Path:
+        """Engagement-wide exclude list (CIDRs/IPs, one per line) for tools that
+        accept ``--excludefile``. Regenerated from ``scope_rule(exclude)`` at run
+        start; see ``pentui.core.scope.write_exclude_file``."""
+        return self.engagement_dir(name) / "excludes.txt"
+
     def tool_output_root(
         self,
         engagement: str,

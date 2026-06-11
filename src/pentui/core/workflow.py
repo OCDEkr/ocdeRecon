@@ -42,7 +42,7 @@ from pentui.core.models import (
 from pentui.core.query import QuerySpec, group_by_subnet, materialize, run_query, select_hosts
 from pentui.core.registry import ToolRegistry
 from pentui.core.runner import RunRequest, get_runner
-from pentui.core.scope import classify_targets
+from pentui.core.scope import classify_targets, write_exclude_file
 from pentui.parsers import get_parser
 from pentui.parsers.base import ParseContext, read_output
 from pentui.persistence.engagement import Engagement
@@ -282,6 +282,9 @@ class WorkflowEngine:
         self._gates_honored = True
         self._max_parallel = config.max_concurrent_scans
         self._wf_name = ""
+        #: Engagement-wide exclude file, written once per run from scope_rules and
+        #: injected into runs of tools that declare an ``exclude_flag``.
+        self._exclude_file: Path | None = None
 
     async def run(self, wf: WorkflowDefinition) -> WorkflowRun:
         self._steps_by_id = {s.id: s for s in wf.steps}
@@ -289,6 +292,13 @@ class WorkflowEngine:
         self._max_parallel = wf.defaults.max_parallel or self.config.max_concurrent_scans
         self._wf_name = wf.name
         self.states = {s.id: StepState.PENDING for s in wf.steps}
+
+        # Materialize the exclude file once for the whole run, so every step's tool
+        # (if it accepts an exclude list) honors the same out-of-scope ranges —
+        # including when a per-/24 fan-out scans a whole in-scope CIDR.
+        self._exclude_file = write_exclude_file(
+            self.scope_rules, self.config.engagement_exclude_file(self.engagement.name)
+        )
 
         run_row = WorkflowRunRepository(self.conn).create(
             WorkflowRun(
@@ -465,13 +475,20 @@ class WorkflowEngine:
         )
         prefix = f"[{label}] " if label else ""
 
+        # Tools that accept an exclude list get the engagement-wide file injected as
+        # raw extra args (not options, so it bypasses option-flag validation) right
+        # before targets in the argv.
+        extra_args = list(step.extra_args)
+        if manifest.exclude_flag and self._exclude_file is not None:
+            extra_args += [manifest.exclude_flag, str(self._exclude_file)]
+
         # The runner (process today, REST in a later phase) knows *how* to run the
         # tool; the engine stays runner-agnostic for bookkeeping/parsing/scope.
         req = RunRequest(
             manifest=manifest,
             profile=profile,
             options=options,
-            extra_args=step.extra_args,
+            extra_args=extra_args,
             targets=targets,
             scan_dir=scan_dir,
             sudo=use_sudo,

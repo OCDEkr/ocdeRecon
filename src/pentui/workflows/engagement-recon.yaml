@@ -1,0 +1,61 @@
+# engagement-recon — the engagement-start root. ONE masscan→nmap discovery, then
+# every other recon tool branches off that single nmap instead of running its own.
+#
+#   discover    : masscan the engagement scope for live hosts / common ports
+#   scan        : nmap once per /24 with live hosts (whole CIDR), one XML per subnet
+#   shots       : gowitness across all the per-/24 nmap XMLs (file_from handoff)
+#   dc-identify : tag Active Directory DCs among the LDAP responders
+#   smb-sweep   : record SMB signing state for the :445 hosts
+#   relay       : (gated) stage the signing-disabled hosts for NTLM relay
+#
+# Everything after `scan` reads the unified model the one nmap already merged — no
+# host is scanned twice. Replaces running subnet-recon + dc-discovery + web-recon +
+# unsigned-relay separately at engagement start (those stay for ad-hoc use). Set the
+# engagement's targets/scope, then kick this off on create. Per-/24 nmap scans run
+# bounded-parallel (`max_parallel`); excluded scope is honored via the engine's
+# engagement-wide --excludefile, so excluded IPs inside a scanned /24 are skipped.
+name: engagement-recon
+description: "One masscan→nmap discovery feeding all recon branches (no re-scan)"
+defaults:
+  gates: true
+  max_parallel: 4               # at most N /24 nmap scans in flight at once
+
+steps:
+  - id: discover
+    tool: masscan
+    profile: "Top TCP"            # fast sweep for live hosts / common ports (root)
+    targets: {from: project}
+
+  - id: scan
+    tool: nmap
+    profile: "Service scan"
+    after: [discover]
+    foreach: subnet/24            # one nmap per /24 that masscan found hosts in
+    foreach_target: subnet        # scan the whole /24 (catches masscan misses)
+    input: {from: hosts, where: {host_state: up}, as: targets}
+
+  - id: shots
+    tool: gowitness
+    profile: "Scan from nmap XML"
+    after: [scan]
+    file_from: {step: scan, flag: "-f"}   # gowitness -f <dir of per-/24 nmap XMLs>
+    gate: false
+
+  - id: dc-identify
+    tool: dc-discovery
+    profile: Identify
+    after: [scan]
+    input: {from: hosts, where: {port_open_in: [389]}, as: ip_list}
+
+  - id: smb-sweep
+    tool: smb-enum
+    profile: "Signing sweep"
+    after: [scan]
+    input: {from: hosts, where: {port_open_in: [445]}, as: ip_list}
+
+  - id: relay
+    tool: ntlmrelayx
+    profile: Relay
+    after: [smb-sweep]
+    gate: true
+    input: {from: hosts, where: {smb_signing_in: ["disabled"]}, as: ip_list}

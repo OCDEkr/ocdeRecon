@@ -27,6 +27,11 @@ def test_scan_dir_without_tool_is_flat(tmp_path):
     assert config.scan_dir("acme", 7) == config.engagement_dir("acme") / "scans" / "7"
 
 
+def test_engagement_exclude_file_lives_under_the_engagement_dir(tmp_path):
+    config = _config(tmp_path)
+    assert config.engagement_exclude_file("acme") == config.engagement_dir("acme") / "excludes.txt"
+
+
 def test_output_root_matches_the_pentests_layout(tmp_path):
     config = _config(tmp_path)
     config.set_output_root("/home/op/pentests")
