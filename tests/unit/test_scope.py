@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from pentui.core.models import ScopeKind, ScopeRule
-from pentui.core.scope import ScopeChecker, ScopeStatus, classify_targets
+from pentui.core.scope import ScopeChecker, ScopeStatus, classify_targets, write_exclude_file
 
 
 def _rules(*pairs: tuple[str, ScopeKind]) -> list[ScopeRule]:
@@ -85,3 +85,22 @@ def test_classify_targets_helper():
     )
     blocked = [d.target for d in decisions if d.blocked]
     assert blocked == ["8.8.8.8"]
+
+
+def test_write_exclude_file_writes_only_exclude_values(tmp_path):
+    rules = _rules(
+        ("10.0.0.0/24", ScopeKind.INCLUDE),
+        ("10.0.0.50", ScopeKind.EXCLUDE),
+        ("10.0.0.99", ScopeKind.EXCLUDE),
+    )
+    path = tmp_path / "sub" / "excludes.txt"
+    result = write_exclude_file(rules, path)
+    assert result == path
+    assert path.read_text().split() == ["10.0.0.50", "10.0.0.99"]
+
+
+def test_write_exclude_file_returns_none_without_excludes(tmp_path):
+    rules = _rules(("10.0.0.0/24", ScopeKind.INCLUDE))
+    path = tmp_path / "excludes.txt"
+    assert write_exclude_file(rules, path) is None
+    assert not path.exists()

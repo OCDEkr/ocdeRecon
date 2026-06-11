@@ -46,9 +46,9 @@ from pentui.core.manifest import (
     ToolProfile,
     save_manifest,
 )
-from pentui.core.models import Scan
+from pentui.core.models import Scan, ScopeKind
 from pentui.core.registry import ToolRegistry, tool_available
-from pentui.core.scope import ScopeStatus, classify_targets
+from pentui.core.scope import ScopeStatus, classify_targets, write_exclude_file
 from pentui.persistence.engagement import Engagement
 from pentui.persistence.repositories import (
     AuditLogRepository,
@@ -194,13 +194,27 @@ class ToolConfigScreen(Screen[None]):
         except ValueError as exc:
             raise ExecutorError("unbalanced quotes in extra args") from exc
 
+    def _exclude_args(self) -> list[str]:
+        """``--excludefile <path>`` for tools that accept one, when the engagement
+        has exclude rules. Read-only (deterministic path); the file is written at
+        launch by ``_launch``. Shown in the preview so the operator sees it."""
+        if self.manifest is None or not self.manifest.exclude_flag:
+            return []
+        rules = ScopeRuleRepository(self.engagement.conn).list_for_project(
+            self.engagement.project_id
+        )
+        if not any(r.kind is ScopeKind.EXCLUDE for r in rules):
+            return []
+        path = self.config.engagement_exclude_file(self.engagement.name)
+        return [self.manifest.exclude_flag, str(path)]
+
     def _try_build(self, *, sudo: bool, scan_dir: str | None) -> list[str]:
         assert self.manifest is not None
         return build_argv(
             self.manifest,
             profile=self._current_profile(),
             options=self._current_options(),
-            extra_args=self._extra_args(),
+            extra_args=[*self._extra_args(), *self._exclude_args()],
             targets=self._current_targets(),
             scan_dir=scan_dir or "{scan_dir}",
             sudo=sudo,
@@ -302,11 +316,20 @@ class ToolConfigScreen(Screen[None]):
                 output_root_override=self.engagement.output_root_override,
             )
         )
+        # Materialize the engagement-wide exclude file so a tool that supports
+        # --excludefile honors out-of-scope ranges (see _exclude_args for the flag).
+        if self.manifest.exclude_flag:
+            write_exclude_file(
+                ScopeRuleRepository(self.engagement.conn).list_for_project(
+                    self.engagement.project_id
+                ),
+                self.config.engagement_exclude_file(self.engagement.name),
+            )
         runs = build_runs(
             self.manifest,
             profile=profile,
             options=options,
-            extra_args=self._extra_args(),
+            extra_args=[*self._extra_args(), *self._exclude_args()],
             targets=targets,
             scan_dir=scan_dir,
             sudo=use_sudo,

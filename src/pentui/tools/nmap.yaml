@@ -6,6 +6,11 @@ binary: nmap                       # resolved on PATH; presence checked at load
 description: "Network mapper / port & service scanner"
 version_check: ["nmap", "--version"]
 
+# When the engagement has exclude scope rules, the engine writes them to one
+# excludes.txt and injects `--excludefile <path>` on every run. This is what keeps
+# excluded IPs from being hit when a per-/24 fan-out scans a whole in-scope CIDR.
+exclude_flag: "--excludefile"
+
 target:
   mode: append                     # append | flag  (how targets enter the argv)
   # flag: "-iL"                    # if mode: flag, write a target file and pass it

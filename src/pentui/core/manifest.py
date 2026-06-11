@@ -114,6 +114,13 @@ class ToolManifest(BaseModel):
     #: True when the tool always needs root (raw sockets, privileged binds, …),
     #: regardless of which options/profile are selected.
     requires_root: bool = False
+    #: Flag through which an engagement-wide exclude file is passed (e.g.
+    #: "--excludefile"). When set and the engagement has exclude scope rules, the
+    #: workflow engine writes the file once per run and injects [exclude_flag, path]
+    #: into every run. Only tools that natively accept an exclude list set this;
+    #: it matters because foreach scans whole /24 CIDRs, which can otherwise sweep
+    #: excluded IPs that sit inside an in-scope subnet.
+    exclude_flag: str | None = None
     target: TargetSpec = Field(default_factory=TargetSpec)
     output: OutputSpec = Field(default_factory=OutputSpec)
     options: list[ToolOption] = Field(default_factory=list)

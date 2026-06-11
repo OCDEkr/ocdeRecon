@@ -38,6 +38,17 @@ def test_load_packaged_nmap_manifest():
     assert manifest.profile("Full TCP").requires_root is True
 
 
+def test_exclude_flag_defaults_none_and_packaged_scanners_set_it():
+    # A tool that doesn't declare one (gowitness) has no exclude flag …
+    gowitness = load_manifest(PACKAGED_TOOLS_DIR / "gowitness.yaml")
+    assert gowitness.exclude_flag is None
+    # … while the network scanners declare --excludefile so the engine can inject
+    # the engagement-wide exclude file.
+    for tool in ("nmap", "masscan"):
+        manifest = load_manifest(PACKAGED_TOOLS_DIR / f"{tool}.yaml")
+        assert manifest.exclude_flag == "--excludefile"
+
+
 def test_invalid_yaml_raises(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text("name: x\nbinary: x\noptions: [not-a-mapping]\n")
