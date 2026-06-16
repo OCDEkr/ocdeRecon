@@ -1,8 +1,9 @@
-"""Report gathering and export tests (Markdown/HTML/JSON/CSV)."""
+"""Report gathering and export tests (Markdown/HTML/JSON/CSV/XML)."""
 
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,12 @@ from pentui.persistence.repositories import (
     WorkflowRunRepository,
 )
 from pentui.persistence.store import merge_scan_result
-from pentui.reporting.exporter import ReportFormat, export, gather_report
+from pentui.reporting.exporter import (
+    ReportFormat,
+    compute_stats,
+    export,
+    gather_report,
+)
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "sample_nmap.xml"
 
@@ -61,6 +67,13 @@ def conn(tmp_path):
             gate_state=GateState.AUTO,
         )
     )
+    return conn
+
+
+@pytest.fixture
+def conn_empty(tmp_path):
+    conn = db.init_db(tmp_path / "empty.db")
+    ProjectRepository(conn).create(Project(name="Empty", client=None))
     return conn
 
 
@@ -103,3 +116,42 @@ def test_export_csv(conn, tmp_path):
     assert lines[0] == "ip,hostname,state,port,protocol,port_state,service,product,version"
     rows = [line for line in lines if line.startswith("10.0.0.1,")]
     assert any(",22," in r and "ssh" in r for r in rows)
+
+
+def test_compute_stats(conn):
+    stats = compute_stats(gather_report(conn, 1))
+    assert stats.hosts == 3
+    assert stats.open_ports == 3
+    assert stats.findings == 2
+    assert stats.scans == 1
+    assert stats.workflow_runs == 1
+    assert not stats.is_empty
+    # one nmap scan, done
+    assert len(stats.scans_by_tool) == 1
+    entry = stats.scans_by_tool[0]
+    assert entry.tool == "nmap"
+    assert entry.total == 1
+    assert entry.by_status.get("done") == 1
+    # severity buckets only include non-zero counts and sum to the finding total
+    assert sum(n for _, n in stats.findings_by_severity) == 2
+
+
+def test_compute_stats_empty(conn_empty):
+    stats = compute_stats(gather_report(conn_empty, 1))
+    assert stats.is_empty
+    assert stats.hosts == 0
+
+
+def test_export_xml(conn, tmp_path):
+    path = export(conn, 1, ReportFormat.XML, tmp_path / "r.xml")
+    root = ET.parse(path).getroot()
+    assert root.tag == "pentui_export"
+    assert root.get("version") == "1"
+    totals = root.find("stats/totals")
+    assert totals is not None
+    assert totals.get("hosts") == "3"
+    assert totals.get("open_ports") == "3"
+    ips = {h.get("ip") for h in root.findall("hosts/host")}
+    assert ips == {"10.0.0.1", "10.0.0.2", "10.0.0.3"}
+    assert len(root.findall("findings/finding")) == 2
+    assert root.find("scans/scan").get("tool") == "nmap"

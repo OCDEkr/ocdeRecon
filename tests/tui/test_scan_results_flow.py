@@ -1,7 +1,7 @@
 """End-to-end Phase 2 flow: run a tool, parse its XML, persist, and browse.
 
 Uses a fake ``nmap`` (a tiny executable that writes XML to its ``-oX`` path) so
-the nmap_xml parser + persistence + results browser are exercised without a real
+the nmap_xml parser + persistence + stats screen are exercised without a real
 nmap scan.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from textual.widgets import Input, Static, Tree
+from textual.widgets import Input, Static
 
 from pentui.app import PentuiApp
 from pentui.config import AppConfig
@@ -90,9 +90,9 @@ async def test_scan_parses_persists_and_browses(tmp_path):
         assert ports[0].number == 80
         assert ports[0].service.product == "nginx"
 
-        # Results browser shows the host.
+        # Stats screen reflects the discovered host/port.
         await pilot.press("r")
         await pilot.pause()
-        tree = app.screen.query_one("#hosts", Tree)
-        labels = [str(node.label) for node in tree.root.children]
-        assert any("10.0.0.1" in label for label in labels)
+        overview = str(app.screen.query_one("#overview", Static).render())
+        assert "1 hosts" in overview
+        assert "1 open ports" in overview

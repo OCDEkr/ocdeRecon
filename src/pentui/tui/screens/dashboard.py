@@ -50,7 +50,7 @@ class DashboardScreen(Screen[None]):
     BINDINGS = [
         ("n", "new_scan", "New scan"),
         ("w", "workflows", "Workflows"),
-        ("r", "results", "Results"),
+        ("r", "results", "Results/Stats"),
         ("e", "export", "Export"),
         ("a", "audit", "Audit log"),
         ("s", "settings", "Settings"),
