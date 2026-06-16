@@ -72,11 +72,18 @@ def test_build_argv_profile_and_targets(nmap, tmp_path):
     )
     assert argv[0] == "nmap"
     assert "-F" in argv  # from the Quick profile
-    # artifact flag + resolved path present
+    # artifact flag + resolved path present; the XML is named after the targets
+    # ({name}), not a generic "nmap.xml".
     assert "-oX" in argv
-    assert str(tmp_path / "nmap.xml") in argv
+    assert str(tmp_path / "10.0.0.1_and_1_more.xml") in argv
     # targets trail
     assert argv[-2:] == ["10.0.0.1", "10.0.0.2"]
+
+
+def test_build_argv_names_artifact_after_single_target(nmap, tmp_path):
+    # A single CIDR target slugifies into a readable, filesystem-safe XML name.
+    argv = build_argv(nmap, targets=["192.168.10.0/24"], scan_dir=tmp_path)
+    assert str(tmp_path / "192.168.10.0_24.xml") in argv
 
 
 def test_build_argv_option_types(nmap, tmp_path):

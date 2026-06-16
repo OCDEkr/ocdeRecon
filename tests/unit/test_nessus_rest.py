@@ -96,7 +96,8 @@ async def test_rest_runner_runs_scan_and_writes_artifact(tmp_path):
     runner = RestRunner(config, client_factory=lambda _s: fake)
     req = _rest_req(tmp_path)
     plan = runner.prepare(req)
-    assert plan.artifact_path.endswith("nessus.nessus")
+    # The exported .nessus is named after the scanned target, not a generic name.
+    assert plan.artifact_path.endswith("10.0.0.50.nessus")
 
     lines: list[str] = []
     result = await runner.execute(req, plan, on_line=lines.append, on_marker=lambda _m: None)

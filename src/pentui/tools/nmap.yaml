@@ -19,7 +19,7 @@ output:
   stream: stdout                   # shown live in the monitor
   artifact:                        # structured artifact for the parser
     flag: "-oX"
-    path: "{scan_dir}/nmap.xml"    # {scan_dir} injected per-scan
+    path: "{scan_dir}/{name}.xml"  # {name} = the scanned target, e.g. 192.168.10.0_24.xml
   parser: nmap_xml                 # -> parsers/nmap_xml.py registered as "nmap_xml"
 
 options:

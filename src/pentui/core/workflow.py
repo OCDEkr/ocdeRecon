@@ -27,7 +27,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from pentui.config import AppConfig
+from pentui.config import AppConfig, target_slug
 from pentui.core.executor import ExecutorError, requires_root
 from pentui.core.manifest import ToolManifest, ToolProfile
 from pentui.core.models import (
@@ -471,6 +471,7 @@ class WorkflowEngine:
             self.engagement.name,
             scan.id,
             tool=step.tool,
+            leaf=target_slug(targets),
             output_root_override=self.engagement.output_root_override,
         )
         prefix = f"[{label}] " if label else ""

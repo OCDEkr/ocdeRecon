@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from pentui.config import AppConfig, NessusSettings
+from pentui.config import AppConfig, NessusSettings, target_slug
 from pentui.core.executor import ExecutorError, build_runs, preview, run_command
 from pentui.core.manifest import ToolKind, ToolManifest, ToolProfile
 from pentui.core.nessus_client import OK_STATUSES, NessusClient, NessusError
@@ -91,8 +91,11 @@ class ProcessRunner:
         )
         note = f"  (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
         artifact = req.manifest.output.artifact
+        name = target_slug(req.targets) or "scan"
         artifact_path = (
-            artifact.path.format(scan_dir=str(req.scan_dir)) if artifact is not None else None
+            artifact.path.format(scan_dir=str(req.scan_dir), name=name)
+            if artifact is not None
+            else None
         )
         return RunPlan(
             command_str=preview(runs[0][1]) + note,
@@ -164,7 +167,7 @@ class RestRunner:
         self._client_factory = client_factory or _make_nessus_client
 
     def prepare(self, req: RunRequest) -> RunPlan:
-        artifact_path = str(req.scan_dir / "nessus.nessus")
+        artifact_path = str(req.scan_dir / f"{target_slug(req.targets) or 'nessus'}.nessus")
         n = len(req.targets)
         settings = self.config.nessus_settings()
         return RunPlan(

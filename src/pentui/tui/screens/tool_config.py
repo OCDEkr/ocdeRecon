@@ -28,7 +28,7 @@ from textual.widgets import (
     Static,
 )
 
-from pentui.config import AppConfig
+from pentui.config import AppConfig, target_slug
 from pentui.core.executor import (
     ExecutorError,
     build_argv,
@@ -309,11 +309,13 @@ class ToolConfigScreen(Screen[None]):
             )
         )
         assert scan.id is not None
+        name = target_slug(targets)
         scan_dir = str(
             self.config.scan_dir(
                 self.engagement.name,
                 scan.id,
                 tool=self.manifest.name,
+                leaf=name,
                 output_root_override=self.engagement.output_root_override,
             )
         )
@@ -339,7 +341,9 @@ class ToolConfigScreen(Screen[None]):
         scan.command_str = preview(runs[0][1]) + note
         scan.args = runs[0][1]
         if self.manifest.output.artifact is not None:
-            scan.artifact_path = self.manifest.output.artifact.path.format(scan_dir=scan_dir)
+            scan.artifact_path = self.manifest.output.artifact.path.format(
+                scan_dir=scan_dir, name=name or "scan"
+            )
         scans.update(scan)
         if use_sudo:
             self._audit("sudo_run", scan.command_str)

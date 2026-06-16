@@ -4,13 +4,41 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pentui.config import AppConfig
+from pentui.config import AppConfig, target_slug
 
 
 def _config(tmp_path: Path) -> AppConfig:
     config = AppConfig(data_dir=tmp_path / "data", config_dir=tmp_path / "config")
     config.ensure_dirs()
     return config
+
+
+def test_target_slug_makes_filesystem_safe_labels():
+    assert target_slug(["192.168.10.0/24"]) == "192.168.10.0_24"
+    assert target_slug(["10.0.0.5"]) == "10.0.0.5"
+    assert target_slug(["example.com"]) == "example.com"
+    # several targets collapse to "first_and_N_more" so the name stays bounded
+    assert target_slug(["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]) == "10.0.0.0_24_and_2_more"
+    # no targets -> empty, so the caller falls back to the scan id
+    assert target_slug([]) == ""
+    assert target_slug(["   "]) == ""
+
+
+def test_scan_dir_leaf_names_folder_after_target(tmp_path):
+    config = _config(tmp_path)
+    leaf = target_slug(["192.168.10.0/24"])
+    assert config.scan_dir("acme", 7, tool="nmap", leaf=leaf) == (
+        config.engagement_dir("acme") / "scans" / "nmap" / "192.168.10.0_24"
+    )
+
+
+def test_scan_dir_leaf_collision_is_disambiguated_with_scan_id(tmp_path):
+    config = _config(tmp_path)
+    first = config.scan_dir("acme", 7, tool="nmap", leaf="192.168.10.0_24")
+    first.mkdir(parents=True)  # a prior run already owns the clean name
+    second = config.scan_dir("acme", 8, tool="nmap", leaf="192.168.10.0_24")
+    assert second.name == "192.168.10.0_24-8"
+    assert second != first
 
 
 def test_scan_dir_default_groups_by_engagement_and_tool(tmp_path):
