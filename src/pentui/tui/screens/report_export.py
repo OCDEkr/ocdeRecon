@@ -48,6 +48,7 @@ class ReportExportScreen(Screen[None]):
             yield Checkbox("HTML", value=True, id="fmt-html")
             yield Checkbox("JSON", id="fmt-json")
             yield Checkbox("CSV (host/port/service inventory)", id="fmt-csv")
+            yield Checkbox("XML (full data + stats)", id="fmt-xml")
         yield Horizontal(Button("Export", variant="primary", id="export"), id="controls")
         yield RichLog(highlight=False, markup=False, wrap=True, id="out")
         yield Footer()
