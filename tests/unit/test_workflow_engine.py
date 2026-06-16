@@ -91,10 +91,13 @@ async def test_chain_feeds_one_tool_into_the_next(tmp_path):
     # both steps completed
     assert engine.states == {"discover": StepState.DONE, "shots": StepState.DONE}
 
-    # the second tool received the URL materialized from the first tool's output
+    # the second tool received the URL materialized from the first tool's output.
+    # The scan folder is named after the target it ran against, so glob for the log
+    # rather than reconstruct the leaf name.
     steps = {s.step_id: s for s in StepRunRepository(eng.conn).list_for_run(run.id)}
-    shots_dir = config.scan_dir(eng.name, steps["shots"].scan_id, tool=steps["shots"].tool)
-    assert (shots_dir / "stdout.log").read_text().strip() == "http://10.0.0.1:80"
+    shots_root = config.tool_output_root(eng.name, steps["shots"].tool)
+    (shots_log,) = shots_root.glob("*/stdout.log")
+    assert shots_log.read_text().strip() == "http://10.0.0.1:80"
 
 
 async def test_out_of_scope_target_is_skipped_and_logged(tmp_path):

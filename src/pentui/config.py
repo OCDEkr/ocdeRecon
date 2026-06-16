@@ -8,11 +8,36 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 APP_NAME = "pentui"
+
+# Characters allowed in a scan-folder / artifact name; every other run collapses to
+# "_" so a target like "192.168.10.0/24" becomes the readable "192.168.10.0_24".
+_SLUG_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def target_slug(targets: Sequence[str], *, max_len: int = 60) -> str:
+    """A filesystem-safe label for a scan, derived from the targets it ran against.
+
+    One target → that target slugified (``10.0.0.0/24`` → ``10.0.0.0_24``;
+    ``example.com`` is already safe). Several targets → the first plus
+    ``_and_N_more`` so the folder/file still names *what* was scanned without
+    growing unbounded. No targets (file-input batches, listeners) → ``""`` so the
+    caller falls back to the scan id for a guaranteed-unique name.
+    """
+    cleaned = [t.strip() for t in targets if t and t.strip()]
+    if not cleaned:
+        return ""
+    first = _SLUG_UNSAFE.sub("_", cleaned[0]).strip("._-")[:max_len].rstrip("._-")
+    first = first or "scan"
+    if len(cleaned) == 1:
+        return first
+    return f"{first}_and_{len(cleaned) - 1}_more"
 
 
 @dataclass(slots=True)
@@ -88,8 +113,9 @@ class AppConfig:
         *,
         output_root_override: Path | None = None,
     ) -> Path:
-        """Base dir for a tool's scans in an engagement (each scan is a numbered
-        subdir below this): ``<root>/<engagement>/scans/<tool>``.
+        """Base dir for a tool's scans in an engagement (each scan is a
+        target-named subdir below this, see :meth:`scan_dir`):
+        ``<root>/<engagement>/scans/<tool>``.
 
         ``<root>`` is ``output_root_override`` when given (the per-engagement
         output dir), else the configurable global output root (see
@@ -110,12 +136,22 @@ class AppConfig:
         scan_id: int,
         tool: str | None = None,
         *,
+        leaf: str | None = None,
         output_root_override: Path | None = None,
     ) -> Path:
-        """Where a scan's raw stdout log and artifacts (e.g. nmap.xml) are written."""
-        return self.tool_output_root(
-            engagement, tool, output_root_override=output_root_override
-        ) / str(scan_id)
+        """Where a scan's raw stdout log and artifacts (e.g. nmap.xml) are written.
+
+        The leaf folder is ``leaf`` when given — a target-derived label like
+        ``192.168.10.0_24`` (see :func:`target_slug`) — else the scan id. A
+        target-named folder that already exists (a re-scan of the same target) is
+        disambiguated with ``-<scan_id>`` so an earlier run is never clobbered,
+        while the common first-run case keeps the clean name.
+        """
+        base = self.tool_output_root(engagement, tool, output_root_override=output_root_override)
+        if not leaf:
+            return base / str(scan_id)
+        candidate = base / leaf
+        return candidate if not candidate.exists() else base / f"{leaf}-{scan_id}"
 
     def reports_dir(self, engagement: str) -> Path:
         """Where exported reports are written for an engagement."""

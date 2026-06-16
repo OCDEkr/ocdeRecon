@@ -19,6 +19,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from pentui.config import target_slug
 from pentui.core.manifest import OptionType, TargetMode, ToolManifest, ToolProfile
 from pentui.core.validators import ValidationFailed, validate_value
 
@@ -149,10 +150,14 @@ def build_argv(
     extra_artifacts = manifest.output.extra_artifacts
     if (artifact is not None or extra_artifacts) and scan_dir is None:
         raise ExecutorError(f"{manifest.name!r} produces an artifact but no scan_dir given")
+    # {name} lets a manifest name its artifact after the target it scanned
+    # (e.g. nmap "{scan_dir}/{name}.xml" -> 192.168.10.0_24.xml). Falls back to
+    # "scan" when there are no targets (file-input batches, listeners).
+    name = target_slug(targets or []) or "scan"
     if artifact is not None:
-        argv.extend([artifact.flag, artifact.path.format(scan_dir=str(scan_dir))])
+        argv.extend([artifact.flag, artifact.path.format(scan_dir=str(scan_dir), name=name)])
     for extra in extra_artifacts:
-        argv.extend([extra.flag, extra.path.format(scan_dir=str(scan_dir))])
+        argv.extend([extra.flag, extra.path.format(scan_dir=str(scan_dir), name=name)])
 
     targets = list(targets or [])
     if targets:

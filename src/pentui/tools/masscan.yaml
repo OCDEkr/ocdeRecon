@@ -17,7 +17,7 @@ output:
   stream: stdout
   artifact:
     flag: "-oX"
-    path: "{scan_dir}/masscan.xml"
+    path: "{scan_dir}/{name}.xml"   # {name} = the scanned target, e.g. 10.0.0.0_24.xml
   parser: nmap_xml          # masscan -oX emits nmap-compatible XML
 
 options:
