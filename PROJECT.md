@@ -472,8 +472,10 @@ Done when, entirely from the TUI, an operator can:
   engagement; a `.encrypted` sidecar marker records the choice (you must know it
   *before* opening), and opening prompts to unlock (`PENTUI_DB_PASSPHRASE` for
   headless). Plaintext engagements still rely on OS-level protection.
-- **Packaging:** **`pipx install`** during development; add a **PyInstaller
-  single-binary** build later to avoid per-box venv management.
+- **Packaging:** **`pipx install`** during development; a **PyInstaller
+  single-binary** build (`pentui.spec` → `pyinstaller pentui.spec`) is also
+  available, bundling the YAML manifests, Textual data, and the SQLCipher native
+  lib so it runs without a per-box venv.
 - **Workflow resumability vs. scheduling:** **persist run state for resume from
   the start** (cheap — `StepRun` is stored anyway). A headless
   `pentui run-workflow` entrypoint exists so external schedulers (cron/systemd/CI)
@@ -495,7 +497,6 @@ Done when, entirely from the TUI, an operator can:
   fields (env `NESSUS_*` still override).
 
 ### Deferred to later phases
-- PyInstaller single-binary distribution.
 - In-app recurring-schedule UI (headless `pentui run-workflow` exists for
   cron/systemd/CI; an in-TUI scheduler is deferred).
 - Custom keybindings and broader accessibility polish.
@@ -560,6 +561,7 @@ can be prototyped as soon as Phase 2 is done).
   the `nmap → second tool` chain.
 - **Phase 5 — Reporting:** Markdown/HTML/JSON/CSV exporters (incl. workflow runs).
 - **Phase 6 — Polish:** more tools by manifest, concurrency/queue UX, themes
-  (default blue-and-white + optional color-blind-safe palette), and the deferred
-  items from §14 (SQLCipher, PyInstaller, scheduling).
+  (default blue-and-white + optional color-blind-safe palette). SQLCipher,
+  PyInstaller, and headless scheduling are now done (§14); the remaining deferred
+  item is an in-app recurring-schedule UI.
 ```

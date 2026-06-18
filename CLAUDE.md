@@ -47,8 +47,8 @@ ntlmrelayx, mitm6, nessus. An engagement DB can be **SQLCipher-encrypted**
 (per-engagement opt-in: set a passphrase on the new-engagement form; opening a
 🔒 engagement prompts to unlock — headless via `PENTUI_DB_PASSPHRASE`). Workflows
 can run **headless** with `pentui run-workflow <engagement> <workflow>` (no TUI;
-for cron/CI). Deferred to future work (§14): PyInstaller packaging, an in-app
-recurring-schedule UI.
+for cron/CI), and a **PyInstaller single-binary** build ships via `pentui.spec`.
+Deferred to future work (§14): an in-app recurring-schedule UI.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.
@@ -78,6 +78,9 @@ pytest tests/unit/test_db.py::test_init_db_creates_schema   # one test
 ruff check .        # lint
 ruff format .       # format
 mypy src            # type check (strict)
+
+# build a single-binary (bundles YAML manifests, Textual data, sqlcipher lib)
+pyinstaller pentui.spec        # -> dist/pentui (onefile)
 ```
 
 ## Architecture
