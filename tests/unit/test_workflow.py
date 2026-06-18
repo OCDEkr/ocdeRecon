@@ -59,7 +59,7 @@ def test_packaged_engagement_recon_loads_and_validates():
     wf = load_workflow(PACKAGED_WORKFLOWS_DIR / "engagement-recon.yaml")
     assert wf.name == "engagement-recon"
     ids = {s.id for s in wf.steps}
-    assert ids == {"discover", "scan", "shots", "dc-identify", "smb-sweep"}
+    assert ids == {"discover", "vuln-scan", "scan", "shots", "dc-identify", "smb-sweep"}
     shots = next(s for s in wf.steps if s.id == "shots")
     assert shots.file_from is not None and shots.file_from.step == "scan"
     # gowitness screenshots only open web services, persisting shots + DB.
@@ -68,6 +68,12 @@ def test_packaged_engagement_recon_loads_and_validates():
     # The nmap scan runs at T4 (workflow steps don't inherit the manifest default).
     scan = next(s for s in wf.steps if s.id == "scan")
     assert scan.options.get("-T") == "4"
+    # Nessus branches off masscan (parallel to nmap), names the scan, and skips
+    # the local host. Its only dependency is `discover`, not `scan`.
+    vuln = next(s for s in wf.steps if s.id == "vuln-scan")
+    assert vuln.after == ["discover"]
+    assert vuln.scan_name == "{engagement} Internal District Office"
+    assert vuln.options.get("test_local_nessus_host") is False
 
 
 def test_workflow_registry_has_engagement_recon():

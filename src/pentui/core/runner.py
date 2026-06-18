@@ -46,6 +46,8 @@ class RunRequest:
     scan_dir: Path
     sudo: bool
     sudo_password: str | None = None
+    #: Override the scan name (REST tools only); ignored by ProcessRunner.
+    scan_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -153,6 +155,18 @@ def _make_nessus_client(settings: NessusSettings) -> NessusClient:
 ClientFactory = Callable[[NessusSettings], NessusClient]
 
 
+def _nessus_settings(options: dict[str, str | bool]) -> dict[str, str]:
+    """Translate a REST step's ``options`` into Nessus scan-policy preferences.
+
+    Nessus expects string values; booleans map to its ``"yes"``/``"no"`` form
+    (e.g. ``test_local_nessus_host: false`` → ``"no"`` to skip the scanner's own
+    host). Any value already a string passes through unchanged.
+    """
+    return {
+        k: ("yes" if v else "no") if isinstance(v, bool) else str(v) for k, v in options.items()
+    }
+
+
 class RestRunner:
     """Runs a scan via an HTTP API instead of a subprocess (Nessus today).
 
@@ -170,8 +184,9 @@ class RestRunner:
         artifact_path = str(req.scan_dir / f"{target_slug(req.targets) or 'nessus'}.nessus")
         n = len(req.targets)
         settings = self.config.nessus_settings()
+        name = req.scan_name or f"pentui {req.scan_dir.name}"
         return RunPlan(
-            command_str=f"[nessus REST] scan {n} target(s) via {settings.url}",
+            command_str=f"[nessus REST] scan {n} target(s) as {name!r} via {settings.url}",
             args=[],
             artifact_path=artifact_path,
         )
@@ -202,7 +217,10 @@ class RestRunner:
 
             on_marker(plan.command_str)
             try:
-                scan_id = await client.launch(req.targets, name=f"pentui {req.scan_dir.name}")
+                name = req.scan_name or f"pentui {req.scan_dir.name}"
+                scan_id = await client.launch(
+                    req.targets, name=name, settings=_nessus_settings(req.options)
+                )
                 emit(f"launched Nessus scan {scan_id}")
                 status = await client.wait(scan_id, on_status=lambda s: emit(f"status: {s}"))
                 emit(f"scan finished: {status}")

@@ -2,6 +2,7 @@
 # every other recon tool branches off that single nmap instead of running its own.
 #
 #   discover    : masscan the engagement scope for live hosts / common ports
+#   vuln-scan   : Nessus the live hosts via the local REST API (runs alongside nmap)
 #   scan        : nmap once per /24 with live hosts (whole CIDR), one XML per subnet
 #   shots       : gowitness across all the per-/24 nmap XMLs (file_from handoff)
 #   dc-identify : tag Active Directory DCs among the LDAP responders
@@ -29,6 +30,16 @@ steps:
     tool: masscan
     profile: "Top TCP"            # fast sweep for live hosts / common ports (root)
     targets: {from: project}
+
+  - id: vuln-scan
+    tool: nessus
+    # Vulnerability-scan masscan's live hosts via the local Nessus REST API. Depends
+    # only on `discover`, so it runs concurrently with the nmap fan-out below.
+    after: [discover]
+    input: {from: hosts, where: {host_state: up}, as: ip_list}   # the IPs masscan dumped
+    scan_name: "{engagement} Internal District Office"
+    options: {"test_local_nessus_host": false}   # don't scan the local Nessus/host IP
+    gate: false
 
   - id: scan
     tool: nmap
