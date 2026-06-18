@@ -61,6 +61,10 @@ pentui                                  # or: python -m pentui.cli
 textual run --dev src/pentui/app.py     # dev mode with inspector
 textual console                         # live log/event console (separate terminal)
 
+# run a workflow headless (no TUI) — for cron/systemd/CI; engagement must exist
+pentui run-workflow <engagement> <workflow> [--unattended]
+#   PENTUI_SUDO_PASSWORD=... feeds sudo for root-requiring steps without a TTY
+
 # tests
 pytest                                          # all
 pytest tests/unit/test_db.py                    # one file
