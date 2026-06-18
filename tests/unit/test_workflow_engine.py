@@ -307,6 +307,26 @@ async def test_workflow_max_parallel_overrides_config(tmp_path):
     assert _peak(peak_dir) == 1  # workflow caps below the config default
 
 
+async def test_independent_steps_run_concurrently(tmp_path):
+    # Two steps with no dependency on each other both launch at once — the engine
+    # schedules independent branches concurrently (this is what lets a Nessus
+    # branch run alongside the nmap fan-out in engagement-recon).
+    config, registry, eng, peak_dir = _conc_setup(tmp_path, subnets=1)
+    config.max_concurrent_scans = 4
+    TargetRepository(eng.conn).create(eng.project_id, "10.0.0.1")
+    wf = WorkflowDefinition.model_validate(
+        {
+            "name": "conc-steps",
+            "steps": [
+                {"id": "a", "tool": "fakeconc", "targets": {"from": "project"}},
+                {"id": "b", "tool": "fakeconc", "targets": {"from": "project"}},
+            ],
+        }
+    )
+    await WorkflowEngine(eng, registry, config, unattended=True).run(wf)
+    assert _peak(peak_dir) == 2  # the two independent steps overlapped
+
+
 async def test_declined_gate_skips_step_and_descendants(tmp_path):
     config, registry, eng = _setup(tmp_path)
     TargetRepository(eng.conn).create(eng.project_id, "10.0.0.1")

@@ -86,14 +86,26 @@ class NessusClient:
             return str(templates[0]["uuid"])
         raise NessusError("no scan templates available on the Nessus server")
 
-    async def launch(self, targets: Iterable[str], name: str) -> int:
-        """Create a scan over ``targets`` and launch it; returns the scan id."""
+    async def launch(
+        self, targets: Iterable[str], name: str, settings: dict[str, str] | None = None
+    ) -> int:
+        """Create a scan over ``targets`` and launch it; returns the scan id.
+
+        ``settings`` adds scan-policy preferences (e.g.
+        ``{"test_local_nessus_host": "no"}`` to skip the scanner's own host);
+        the core fields below always win over any same-named key.
+        """
         text_targets = ",".join(targets)
         if not text_targets:
             raise NessusError("no targets to scan")
         body = {
             "uuid": await self._template_uuid(),
-            "settings": {"name": name, "text_targets": text_targets, "enabled": False},
+            "settings": {
+                **(settings or {}),
+                "name": name,
+                "text_targets": text_targets,
+                "enabled": False,
+            },
         }
         created = await self._json("POST", "/scans", json=body)
         scan = created.get("scan") or {}

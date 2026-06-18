@@ -58,6 +58,42 @@ async def test_launch_poll_and_export(tmp_path):
         await client.aclose()
 
 
+async def test_launch_merges_settings_into_body(tmp_path):
+    """Extra settings (e.g. test_local_nessus_host) land in the POST /scans body,
+    without clobbering the core name/text_targets/enabled fields."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/editor/scan/templates":
+            return httpx.Response(200, json={"templates": [{"name": "basic", "uuid": "TPL-1"}]})
+        if path == "/scans" and request.method == "POST":
+            import json
+
+            captured.update(json.loads(request.content)["settings"])
+            return httpx.Response(200, json={"scan": {"id": 42}})
+        if path == "/scans/42/launch":
+            return httpx.Response(200, json={})
+        return httpx.Response(404, text=f"unexpected {request.method} {path}")
+
+    http = httpx.AsyncClient(
+        base_url="https://localhost:8834", transport=httpx.MockTransport(handler)
+    )
+    client = NessusClient("https://localhost:8834", "ak", "sk", http, poll_interval=0)
+    try:
+        await client.launch(
+            ["10.0.0.50"],
+            name="ACME Internal District Office",
+            settings={"test_local_nessus_host": "no"},
+        )
+    finally:
+        await client.aclose()
+    assert captured["test_local_nessus_host"] == "no"
+    assert captured["name"] == "ACME Internal District Office"
+    assert captured["text_targets"] == "10.0.0.50"
+    assert captured["enabled"] is False
+
+
 async def test_api_error_is_raised(tmp_path):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, text="forbidden")

@@ -26,10 +26,14 @@ class FakeClient:
     def __init__(self, sample: str = SAMPLE_NESSUS) -> None:
         self.sample = sample
         self.targets: list[str] = []
+        self.name: str | None = None
+        self.settings: dict[str, str] | None = None
         self.stopped = False
 
-    async def launch(self, targets, name):  # noqa: ANN001
+    async def launch(self, targets, name, settings=None):  # noqa: ANN001
         self.targets = list(targets)
+        self.name = name
+        self.settings = settings
         return 7
 
     async def wait(self, scan_id, on_status=None):  # noqa: ANN001
@@ -78,16 +82,18 @@ def test_nessus_env_overrides_settings(tmp_path, monkeypatch):
 
 
 # -- RestRunner ------------------------------------------------------------ #
-def _rest_req(tmp_path: Path) -> RunRequest:
-    return RunRequest(
-        manifest=ToolManifest(name="nessus", binary="nessuscli", kind=ToolKind.REST),
-        profile=None,
-        options={},
-        extra_args=[],
-        targets=["10.0.0.50"],
-        scan_dir=tmp_path / "scan",
-        sudo=False,
-    )
+def _rest_req(tmp_path: Path, **overrides) -> RunRequest:  # noqa: ANN003
+    kw = {
+        "manifest": ToolManifest(name="nessus", binary="nessuscli", kind=ToolKind.REST),
+        "profile": None,
+        "options": {},
+        "extra_args": [],
+        "targets": ["10.0.0.50"],
+        "scan_dir": tmp_path / "scan",
+        "sudo": False,
+    }
+    kw.update(overrides)
+    return RunRequest(**kw)
 
 
 async def test_rest_runner_runs_scan_and_writes_artifact(tmp_path):
@@ -106,6 +112,35 @@ async def test_rest_runner_runs_scan_and_writes_artifact(tmp_path):
     assert fake.targets == ["10.0.0.50"]
     assert Path(plan.artifact_path).read_text() == SAMPLE_NESSUS
     assert any("launched Nessus scan 7" in line for line in lines)
+
+
+async def test_rest_runner_passes_scan_name_and_settings(tmp_path):
+    config = _config(tmp_path)
+    fake = FakeClient()
+    runner = RestRunner(config, client_factory=lambda _s: fake)
+    # A custom scan name and a bool option that maps to a Nessus yes/no preference.
+    req = _rest_req(
+        tmp_path,
+        scan_name="ACME Internal District Office",
+        options={"test_local_nessus_host": False},
+    )
+    await runner.execute(
+        req, runner.prepare(req), on_line=lambda _l: None, on_marker=lambda _m: None
+    )
+    assert fake.name == "ACME Internal District Office"
+    assert fake.settings == {"test_local_nessus_host": "no"}
+
+
+async def test_rest_runner_defaults_scan_name(tmp_path):
+    config = _config(tmp_path)
+    fake = FakeClient()
+    runner = RestRunner(config, client_factory=lambda _s: fake)
+    req = _rest_req(tmp_path)  # no scan_name
+    await runner.execute(
+        req, runner.prepare(req), on_line=lambda _l: None, on_marker=lambda _m: None
+    )
+    assert fake.name == f"pentui {req.scan_dir.name}"
+    assert fake.settings == {}
 
 
 async def test_rest_runner_without_keys_fails_cleanly(tmp_path, monkeypatch):

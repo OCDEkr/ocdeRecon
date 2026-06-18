@@ -7,9 +7,11 @@ order, applies gates (auto-approved when the run is unattended), skips-and-logs
 out-of-scope targets, parses+persists each step's output so downstream queries see
 it, and records WorkflowRun/StepRun state.
 
-Steps run sequentially in a valid topological order (dependencies respected;
-fan-out is expressed in the DAG). Concurrent execution of independent branches is
-a future optimization — see PROJECT.md §16.
+Independent branches run concurrently: each step launches as soon as all the
+steps it runs ``after`` reach a terminal state, bounded across the run by a
+shared scan semaphore (``max_parallel``). REST steps (e.g. Nessus) poll an API
+rather than spawn a local process, so they don't consume a semaphore slot.
+Fan-out within a step is expressed in the DAG.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from pentui.config import AppConfig, target_slug
 from pentui.core.executor import ExecutorError, requires_root
-from pentui.core.manifest import ToolManifest, ToolProfile
+from pentui.core.manifest import ToolKind, ToolManifest, ToolProfile
 from pentui.core.models import (
     GateState,
     Scan,
@@ -97,6 +99,9 @@ class WorkflowStep(BaseModel):
     #: Feed a file-input flag (e.g. gowitness -f) the collected artifacts of an
     #: upstream step's runs (e.g. the per-/24 nmap XMLs), batching over them.
     file_from: FileFrom | None = None
+    #: Override the scan name (REST tools only, e.g. the Nessus scan title).
+    #: ``{engagement}`` is substituted with the engagement name.
+    scan_name: str | None = None
     gate: bool = False
     on_failure: str = "stop-branch"  # "stop-branch" | "continue"
 
@@ -238,6 +243,10 @@ class StepState(StrEnum):
     SKIPPED = "skipped"
 
 
+#: A step's dependencies must all be in one of these before it can launch.
+_TERMINAL = frozenset({StepState.DONE, StepState.ERROR, StepState.SKIPPED})
+
+
 @dataclass(slots=True)
 class WorkflowEvent:
     step_id: str
@@ -292,6 +301,11 @@ class WorkflowEngine:
         self._max_parallel = wf.defaults.max_parallel or self.config.max_concurrent_scans
         self._wf_name = wf.name
         self.states = {s.id: StepState.PENDING for s in wf.steps}
+        # One semaphore for the whole run bounds *total* local scans in flight —
+        # across concurrent steps as well as a single step's fan-out groups —
+        # so overlapping branches never exceed max_parallel. REST steps poll an
+        # API instead of spawning a process, so they're exempt (see _execute).
+        self._scan_sem = asyncio.Semaphore(max(1, self._max_parallel))
 
         # Materialize the exclude file once for the whole run, so every step's tool
         # (if it accepts an exclude list) honors the same out-of-scope ranges —
@@ -310,15 +324,47 @@ class WorkflowEngine:
                 started_at=datetime.now(),
             )
         )
-        for sid in topological_order(wf.steps):
-            if self.states[sid] is StepState.SKIPPED:
-                continue
-            await self._run_step(run_row, self._steps_by_id[sid])
+        await self._schedule(run_row)
 
         run_row.status = WorkflowStatus.DONE
         run_row.finished_at = datetime.now()
         WorkflowRunRepository(self.conn).update(run_row)
         return run_row
+
+    # -- scheduling -------------------------------------------------------- #
+    async def _schedule(self, run_row: WorkflowRun) -> None:
+        """Run steps concurrently, honoring the DAG.
+
+        A step launches once every dependency it runs ``after`` is terminal
+        (done/error/skipped) — matching the old sequential semantics, where a
+        ``stop-branch`` failure pre-marks descendants SKIPPED and ``continue``
+        lets them run anyway. Independent branches therefore overlap; the shared
+        ``_scan_sem`` keeps total local scans bounded. The DAG is acyclic
+        (validated on load), so the loop always makes progress.
+        """
+        remaining = set(self.states)
+        running: dict[asyncio.Task[None], str] = {}
+        try:
+            while remaining or running:
+                for sid in sorted(remaining):
+                    step = self._steps_by_id[sid]
+                    if self.states[sid] is StepState.SKIPPED:
+                        remaining.discard(sid)
+                    elif all(self.states[dep] in _TERMINAL for dep in step.after):
+                        remaining.discard(sid)
+                        running[asyncio.create_task(self._run_step(run_row, step))] = sid
+                if not running:
+                    break  # only unreachable SKIPPED steps left
+                done, _ = await asyncio.wait(running, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    del running[task]
+                    task.result()  # surface unexpected engine errors
+        except asyncio.CancelledError:
+            for task in running:
+                task.cancel()
+            if running:
+                await asyncio.gather(*running, return_exceptions=True)
+            raise
 
     # -- per-step ---------------------------------------------------------- #
     async def _run_step(self, run_row: WorkflowRun, step: WorkflowStep) -> None:
@@ -398,16 +444,23 @@ class WorkflowEngine:
         use_sudo = requires_root(manifest, profile=profile, options=options) and not self.is_root
         artifacts_out = self.config.workflow_artifacts_dir(self.engagement.name, run_id, step.id)
 
-        # Fan-out groups (e.g. per-/24 nmap scans) run concurrently, bounded so we
-        # don't launch hundreds of scans — or trip an IDS — at once. A single
-        # group degenerates to one task. Their DB writes happen in synchronous
-        # bursts between awaits, so the shared connection is never mid-transaction
-        # across coroutines; cancelling the worker (Stop) propagates through
-        # gather into each run_command, which terminates its process group.
-        sem = asyncio.Semaphore(max(1, self._max_parallel))
+        # Fan-out groups (e.g. per-/24 nmap scans) run concurrently, bounded by the
+        # run-wide semaphore so we don't launch hundreds of scans — or trip an IDS —
+        # at once, even when several branches overlap. A single group degenerates to
+        # one task. Their DB writes happen in synchronous bursts between awaits, so
+        # the shared connection is never mid-transaction across coroutines; cancelling
+        # the worker (Stop) propagates through gather into each run_command, which
+        # terminates its process group. REST tools (Nessus) poll an API rather than
+        # spawn a local process, so they don't hold a slot — a long poll mustn't
+        # starve the local subprocess steps running alongside it.
+        is_local = manifest.kind is not ToolKind.REST
 
         async def _bounded(label: str, targets: list[str]) -> tuple[bool, int | None]:
-            async with sem:
+            if not is_local:
+                return await self._run_group(
+                    step, manifest, profile, options, use_sudo, label, targets, artifacts_out
+                )
+            async with self._scan_sem:
                 return await self._run_group(
                     step, manifest, profile, options, use_sudo, label, targets, artifacts_out
                 )
@@ -483,8 +536,14 @@ class WorkflowEngine:
         if manifest.exclude_flag and self._exclude_file is not None:
             extra_args += [manifest.exclude_flag, str(self._exclude_file)]
 
-        # The runner (process today, REST in a later phase) knows *how* to run the
-        # tool; the engine stays runner-agnostic for bookkeeping/parsing/scope.
+        # A custom scan name (REST tools) is templated here, where the engagement
+        # name lives, so the runner receives the final string.
+        scan_name = (
+            step.scan_name.format(engagement=self.engagement.name) if step.scan_name else None
+        )
+
+        # The runner (process or REST) knows *how* to run the tool; the engine
+        # stays runner-agnostic for bookkeeping/parsing/scope.
         req = RunRequest(
             manifest=manifest,
             profile=profile,
@@ -494,6 +553,7 @@ class WorkflowEngine:
             scan_dir=scan_dir,
             sudo=use_sudo,
             sudo_password=self.sudo_password,
+            scan_name=scan_name,
         )
         runner = get_runner(manifest, self.config)
         try:
