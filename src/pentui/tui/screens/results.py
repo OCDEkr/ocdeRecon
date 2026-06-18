@@ -30,6 +30,28 @@ if TYPE_CHECKING:
     from pentui.app import PentuiApp
 
 
+class _NavDataTable(DataTable[str]):
+    """A DataTable that releases focus to the adjacent focusable widget when the
+    cursor would move past its top/bottom edge, so the up/down arrows flow
+    continuously across the stacked stat tables on :class:`ResultsScreen`."""
+
+    def action_cursor_up(self) -> None:
+        if self.cursor_coordinate.row == 0:
+            prev = self.screen.focus_previous(DataTable)
+            if isinstance(prev, DataTable) and prev.row_count:
+                prev.move_cursor(row=prev.row_count - 1)
+        else:
+            super().action_cursor_up()
+
+    def action_cursor_down(self) -> None:
+        if self.cursor_coordinate.row >= self.row_count - 1:
+            nxt = self.screen.focus_next(DataTable)
+            if isinstance(nxt, DataTable) and nxt.row_count:
+                nxt.move_cursor(row=0)
+        else:
+            super().action_cursor_down()
+
+
 class ResultsScreen(Screen[None]):
     """Aggregate stats for the engagement, with XML export."""
 
@@ -130,7 +152,7 @@ class ResultsScreen(Screen[None]):
         rows: list[tuple[str, ...]],
     ) -> None:
         container.mount(Static(title, classes="stat-title"))
-        table: DataTable[str] = DataTable(classes="stat-table")
+        table: DataTable[str] = _NavDataTable(classes="stat-table")
         table.cursor_type = "row"
         table.zebra_stripes = True
         table.add_columns(*columns)
