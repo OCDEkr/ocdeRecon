@@ -87,14 +87,16 @@ class WorkflowStep(BaseModel):
     after: list[str] = Field(default_factory=list)
     targets: StepTargets | None = None
     input: QuerySpec | None = None
-    #: Fan out into one run per group, e.g. "subnet/24" runs once per /24 of the
-    #: hosts selected by ``input``.
+    #: Fan out into one run per group of the hosts selected by ``input``:
+    #: ``"subnet/24"`` runs once per /24; ``"host"`` runs once per individual
+    #: host (so single-target tools like cewl/sublist3r fan out over many hosts).
     foreach: str | None = None
     #: What each ``foreach`` run targets. "hosts" (default) scans only the IPs
     #: selected by ``input`` in that group; "subnet" scans the whole group CIDR
     #: (e.g. 192.168.5.0/24) — catching hosts a fast upstream sweep (masscan)
     #: missed — falling back to the in-scope hosts when the CIDR isn't wholly in
     #: scope, so a hit subnet is never skipped nor scanned out of scope.
+    #: Ignored when ``foreach: host`` (each run targets exactly its one host).
     foreach_target: Literal["hosts", "subnet"] = "hosts"
     #: Feed a file-input flag (e.g. gowitness -f) the collected artifacts of an
     #: upstream step's runs (e.g. the per-/24 nmap XMLs), batching over them.
@@ -130,7 +132,7 @@ class WorkflowDefinition(BaseModel):
                 if dep not in idset:
                     raise ValueError(f"step {step.id!r} depends on unknown step {dep!r}")
             if step.foreach is not None:
-                subnet_prefix(step.foreach)  # validates "subnet/<n>"
+                validate_foreach(step.foreach)  # validates "host" or "subnet/<n>"
                 if step.input is None:
                     raise ValueError(f"step {step.id!r} has 'foreach' but no 'input' query")
             if step.file_from is not None and step.file_from.step not in idset:
@@ -147,6 +149,17 @@ def subnet_prefix(foreach: str) -> int:
     if not match or not 0 < int(match.group(1)) <= 128:
         raise ValueError(f"invalid foreach {foreach!r} (expected 'subnet/<1-128>')")
     return int(match.group(1))
+
+
+def is_per_host(foreach: str) -> bool:
+    """Whether a ``foreach`` value fans out one run per individual host."""
+    return foreach.strip() == "host"
+
+
+def validate_foreach(foreach: str) -> None:
+    """Validate a ``foreach`` value ('host' or 'subnet/<1-128>'). Raises otherwise."""
+    if not is_per_host(foreach):
+        subnet_prefix(foreach)
 
 
 def topological_order(steps: list[WorkflowStep]) -> list[str]:
@@ -475,8 +488,10 @@ class WorkflowEngine:
             self._fail(step, "a run failed", scan_id=last_scan_id)
 
     def _run_groups(self, step: WorkflowStep) -> list[tuple[str, list[str]]]:
-        """Resolve the run groups: one per /24 for foreach, else a single group."""
+        """Resolve the run groups: one per host/`/24` for foreach, else a single group."""
         if step.foreach is not None and step.input is not None:
+            if is_per_host(step.foreach):
+                return self._host_groups(step)
             prefix = subnet_prefix(step.foreach)
             hosts = select_hosts(self.conn, self.project_id, step.input)
             groups: list[tuple[str, list[str]]] = []
@@ -497,6 +512,23 @@ class WorkflowEngine:
             targets = self._scope_filter(step, self._resolve_targets(step))
             return [("", targets)] if targets else []
         return [("", [])]  # no targets (e.g. a file_from step, or a listener)
+
+    def _host_groups(self, step: WorkflowStep) -> list[tuple[str, list[str]]]:
+        """One run per individual host selected by ``input`` (``foreach: host``).
+
+        Each group materializes a single host on its own so single-target tools
+        (cewl, sublist3r) fan out over many hosts in one workflow. The label is
+        the host's hostname/IP for readable monitor output; ``foreach_target`` is
+        irrelevant here (a per-host run always targets just that host).
+        """
+        assert step.input is not None
+        hosts = select_hosts(self.conn, self.project_id, step.input)
+        groups: list[tuple[str, list[str]]] = []
+        for host in hosts:
+            targets = self._scope_filter(step, materialize([host], step.input))
+            if targets:
+                groups.append((host.hostname or host.ip, targets))
+        return groups
 
     async def _run_group(
         self,

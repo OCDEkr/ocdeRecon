@@ -212,6 +212,48 @@ def test_foreach_hosts_mode_scans_only_discovered_ips(tmp_path):
     ]
 
 
+def test_foreach_host_mode_one_group_per_host(tmp_path):
+    # foreach: host fans out one run per individual host (cewl/sublist3r style):
+    # one group per host, labelled by hostname when present, else the IP.
+    config, registry, eng = _fanout_setup(tmp_path)
+    HostRepository(eng.conn).upsert(
+        eng.project_id, Host(ip="10.0.3.9", hostname="web1.corp", state="up")
+    )
+    engine = WorkflowEngine(eng, registry, config)
+    step = WorkflowStep.model_validate(
+        {
+            "id": "words",
+            "tool": "fakenmap",
+            "foreach": "host",
+            "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "targets"},
+        }
+    )
+    groups = engine._run_groups(step)
+    assert groups == [
+        ("10.0.1.5", ["10.0.1.5"]),
+        ("10.0.1.6", ["10.0.1.6"]),
+        ("10.0.2.7", ["10.0.2.7"]),
+        ("web1.corp", ["web1.corp"]),
+    ]
+
+
+def test_foreach_host_respects_scope(tmp_path):
+    # per-host fan-out still drops out-of-scope hosts (scope is a hard guardrail).
+    config, registry, eng = _fanout_setup(tmp_path)
+    rules = [ScopeRule(project_id=eng.project_id, value="10.0.1.0/24", kind=ScopeKind.INCLUDE)]
+    engine = WorkflowEngine(eng, registry, config, scope_rules=rules)
+    step = WorkflowStep.model_validate(
+        {
+            "id": "words",
+            "tool": "fakenmap",
+            "foreach": "host",
+            "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "ip_list"},
+        }
+    )
+    groups = engine._run_groups(step)
+    assert groups == [("10.0.1.5", ["10.0.1.5"]), ("10.0.1.6", ["10.0.1.6"])]
+
+
 def test_foreach_subnet_mode_falls_back_to_hosts_when_cidr_out_of_scope(tmp_path):
     # When the full /24 isn't wholly in scope, subnet mode narrows to the
     # in-scope discovered hosts rather than skipping the subnet or scanning out

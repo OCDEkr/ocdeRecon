@@ -25,7 +25,9 @@ in-memory registry is reloaded so it shows up immediately.
 A manifest option may set `file_input: true` (with `file_glob`); pointing it at a
 directory **batches the run once per matching file** (e.g. gowitness `-f` over a
 folder of nmap XMLs). A workflow step may `foreach: subnet/24` to **fan out into
-one run per /24** of the hosts its `input` selects, and `file_from: {step, flag}`
+one run per /24** of the hosts its `input` selects (or `foreach: host` for **one
+run per individual host** — how single-target tools like cewl/sublist3r fan out
+over many hosts), and `file_from: {step, flag}`
 to feed a downstream file-input flag the **collected artifacts** of an upstream
 step (each run's artifact is copied into a per-step dir). The shipped
 `engagement-recon` workflow chains masscan → per-/24 nmap → gowitness this way
