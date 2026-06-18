@@ -467,14 +467,17 @@ Done when, entirely from the TUI, an operator can:
     condition/materializer sets as needs arise.
 - **Persistence library:** stdlib **`sqlite3` + a thin repository layer** to
   start; revisit SQLModel only if relationship/query complexity grows.
-- **DB encryption at rest:** rely on **OS-level protection** (LUKS / file perms)
-  for the PoC and document it; revisit **SQLCipher** (passphrase-protected
-  engagements) in a later phase.
+- **DB encryption at rest:** **implemented** via SQLCipher (`sqlcipher3-binary`,
+  bundled native lib). Per-engagement opt-in: set a passphrase when creating the
+  engagement; a `.encrypted` sidecar marker records the choice (you must know it
+  *before* opening), and opening prompts to unlock (`PENTUI_DB_PASSPHRASE` for
+  headless). Plaintext engagements still rely on OS-level protection.
 - **Packaging:** **`pipx install`** during development; add a **PyInstaller
   single-binary** build later to avoid per-box venv management.
 - **Workflow resumability vs. scheduling:** **persist run state for resume from
-  the start** (cheap — `StepRun` is stored anyway); **defer scheduled/recurring
-  runs** entirely.
+  the start** (cheap — `StepRun` is stored anyway). A headless
+  `pentui run-workflow` entrypoint exists so external schedulers (cron/systemd/CI)
+  can drive runs; an in-app recurring-schedule UI stays deferred.
 - **NSE / vuln → Findings:** capture NSE script output as findings (title + raw
   detail). Severity is **normalized** by `core/severity.py` — a `vulners` CVSS
   score, a "VULNERABLE" state line, or a high-signal script id raises a finding
@@ -492,9 +495,9 @@ Done when, entirely from the TUI, an operator can:
   fields (env `NESSUS_*` still override).
 
 ### Deferred to later phases
-- SQLCipher encrypted engagements (passphrase to open).
 - PyInstaller single-binary distribution.
-- Scheduled / recurring workflow runs.
+- In-app recurring-schedule UI (headless `pentui run-workflow` exists for
+  cron/systemd/CI; an in-TUI scheduler is deferred).
 - Custom keybindings and broader accessibility polish.
 
 ---

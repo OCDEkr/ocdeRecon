@@ -3,12 +3,24 @@
 One database file per engagement. The schema is applied through an ordered list
 of migrations tracked in a ``schema_version`` table, so future phases can evolve
 the schema additively.
+
+Engagements may be **encrypted at rest** with SQLCipher: pass a ``passphrase`` to
+:func:`connect`/:func:`init_db` and the connection is opened through the
+``sqlcipher3`` driver with ``PRAGMA key`` set before any other statement. The
+resulting connection is API-compatible with :class:`sqlite3.Connection`, so the
+repository layer is unchanged.
 """
 
 from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any, cast
+
+
+class EncryptionError(Exception):
+    """Opening an encrypted database failed — wrong passphrase or corrupt file."""
+
 
 #: Ordered migrations. Each entry is the full SQL applied when upgrading TO that
 #: version from the previous one. Append new migrations; never edit shipped ones.
@@ -159,14 +171,35 @@ MIGRATIONS: list[str] = [
 SCHEMA_VERSION = len(MIGRATIONS)
 
 
-def connect(db_path: str | Path) -> sqlite3.Connection:
-    """Open a connection with foreign keys enforced and row access by name."""
+def connect(db_path: str | Path, *, passphrase: str | None = None) -> sqlite3.Connection:
+    """Open a connection with foreign keys enforced and row access by name.
+
+    When ``passphrase`` is given the database is opened through SQLCipher and
+    keyed; a wrong passphrase (or a non-encrypted file) raises
+    :class:`EncryptionError`.
+    """
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
+    if passphrase is None:
+        conn: Any = sqlite3.connect(path)
+        conn.row_factory = sqlite3.Row
+    else:
+        from sqlcipher3 import dbapi2 as sqlcipher
+
+        conn = sqlcipher.connect(str(path))
+        conn.row_factory = sqlcipher.Row
+        # SQLCipher derives the key from the passphrase; it must be set before any
+        # other statement. PRAGMA can't bind params, so escape quotes by doubling.
+        conn.execute(f"PRAGMA key = '{passphrase.replace(chr(39), chr(39) * 2)}';")
+        try:
+            conn.execute("SELECT count(*) FROM sqlite_master;").fetchone()
+        except sqlcipher.DatabaseError as exc:
+            conn.close()
+            raise EncryptionError(
+                "could not open encrypted engagement (wrong passphrase or not a SQLCipher database)"
+            ) from exc
     conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    return cast("sqlite3.Connection", conn)
 
 
 def _current_version(conn: sqlite3.Connection) -> int:
@@ -185,8 +218,8 @@ def migrate(conn: sqlite3.Connection) -> int:
     return _current_version(conn)
 
 
-def init_db(db_path: str | Path) -> sqlite3.Connection:
-    """Open ``db_path``, applying migrations so the schema is current."""
-    conn = connect(db_path)
+def init_db(db_path: str | Path, *, passphrase: str | None = None) -> sqlite3.Connection:
+    """Open ``db_path`` (optionally encrypted), applying pending migrations."""
+    conn = connect(db_path, passphrase=passphrase)
     migrate(conn)
     return conn

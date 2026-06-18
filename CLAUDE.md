@@ -43,8 +43,12 @@ be stopped with `s` (the process group is terminated). Creating an engagement ca
 dropdown on the new-engagement form (needs initial targets; otherwise launch from
 the dashboard with `w`). The workflow monitor rings a bell + notifies on finish.
 Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
-ntlmrelayx, mitm6, nessus. Deferred to future work (§14): SQLCipher-encrypted
-engagements, PyInstaller packaging, scheduled runs.
+ntlmrelayx, mitm6, nessus. An engagement DB can be **SQLCipher-encrypted**
+(per-engagement opt-in: set a passphrase on the new-engagement form; opening a
+🔒 engagement prompts to unlock — headless via `PENTUI_DB_PASSPHRASE`). Workflows
+can run **headless** with `pentui run-workflow <engagement> <workflow>` (no TUI;
+for cron/CI). Deferred to future work (§14): PyInstaller packaging, an in-app
+recurring-schedule UI.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.

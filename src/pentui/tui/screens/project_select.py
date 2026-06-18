@@ -31,9 +31,10 @@ from pentui.config import AppConfig
 from pentui.core.models import ScopeKind
 from pentui.core.registry import ToolRegistry
 from pentui.core.workflow import build_workflow_registry
-from pentui.persistence.engagement import Engagement, open_engagement
+from pentui.persistence.db import EncryptionError
+from pentui.persistence.engagement import Engagement, is_encrypted, open_engagement
 from pentui.persistence.repositories import ScopeRuleRepository, TargetRepository
-from pentui.tui.screens.modals import ConfirmModal
+from pentui.tui.screens.modals import ConfirmModal, TextPromptModal
 
 if TYPE_CHECKING:
     from pentui.app import PentuiApp
@@ -94,6 +95,12 @@ class ProjectSelectScreen(Screen[None]):
                 id="output",
                 classes="field",
             )
+            yield Input(
+                placeholder="encryption passphrase (optional — encrypts the engagement DB)",
+                password=True,
+                id="passphrase",
+                classes="field",
+            )
             yield Label("Run workflows on create (unattended, ↑/↓ + space to select, optional):")
             yield SelectionList[str](*self._workflow_options(), id="kickoff")
             yield Horizontal(Button("Create & open", variant="primary", id="create"))
@@ -107,7 +114,7 @@ class ProjectSelectScreen(Screen[None]):
         # Fired when returning from the dashboard — pick up newly created
         # engagements and reset the form so the previous name doesn't linger.
         self._refresh_list()
-        for field in ("#name", "#client", "#includes", "#excludes", "#targets"):
+        for field in ("#name", "#client", "#includes", "#excludes", "#targets", "#passphrase"):
             self.query_one(field, Input).value = ""
         self.query_one("#output", Input).value = str(self.config.output_root() or "")
         self.query_one("#kickoff", SelectionList).deselect_all()
@@ -117,7 +124,8 @@ class ProjectSelectScreen(Screen[None]):
         view = self.query_one("#existing", ListView)
         view.clear()
         for name in self._existing_engagements():
-            view.append(ListItem(Label(name), name=name))
+            label = f"🔒 {name}" if is_encrypted(self.config, name) else name
+            view.append(ListItem(Label(label), name=name))
 
     def _focus_default(self) -> None:
         # Focus the list (so d/↑/↓/Enter work) when there are engagements;
@@ -135,8 +143,27 @@ class ProjectSelectScreen(Screen[None]):
 
     @on(ListView.Selected, "#existing")
     def _open_existing(self, event: ListView.Selected) -> None:
-        if event.item.name:
-            self._open(event.item.name)
+        name = event.item.name
+        if not name:
+            return
+        if is_encrypted(self.config, name):
+            self._prompt_passphrase(name)
+        else:
+            self._open(name)
+
+    def _prompt_passphrase(self, name: str) -> None:
+        """Ask for the passphrase, then open the encrypted engagement with it."""
+
+        def on_passphrase(passphrase: str | None) -> None:
+            if passphrase:
+                self._open(name, passphrase=passphrase)
+            else:
+                self.notify("Passphrase required to open this engagement.", severity="warning")
+
+        self.app.push_screen(
+            TextPromptModal(f"🔒 Unlock '{name}'", "passphrase", password=True),
+            on_passphrase,
+        )
 
     def action_create(self) -> None:
         """Keyboard shortcut (Ctrl+N) for the Create & open button."""
@@ -193,8 +220,16 @@ class ProjectSelectScreen(Screen[None]):
         self._refresh_list()
         self._focus_default()
 
-    def _open(self, name: str, *, create: bool = False) -> None:
-        engagement = open_engagement(self.config, name)
+    def _open(self, name: str, *, create: bool = False, passphrase: str | None = None) -> None:
+        encrypt = False
+        if create:
+            passphrase = self.query_one("#passphrase", Input).value or None
+            encrypt = passphrase is not None
+        try:
+            engagement = open_engagement(self.config, name, passphrase=passphrase, encrypt=encrypt)
+        except EncryptionError as exc:
+            self.notify(str(exc), severity="error")
+            return
         kickoffs: list[str] = []
         target_values: list[str] = []
         if create:

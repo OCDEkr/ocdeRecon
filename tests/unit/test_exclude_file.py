@@ -123,18 +123,19 @@ async def test_tool_without_exclude_flag_is_not_injected(tmp_path):
 def test_shipped_engagement_recon_workflow_is_valid():
     wf = build_workflow_registry().get("engagement-recon")
     assert wf is not None
-    assert [s.id for s in wf.steps] == [
+    assert {s.id for s in wf.steps} == {
         "discover",
+        "vuln-scan",
         "scan",
         "shots",
         "dc-identify",
         "smb-sweep",
-    ]
+    }
     # Recon-only: enumerates and tags, no relay/attack step.
     assert "ntlmrelayx" not in {s.tool for s in wf.steps}
     # One masscan + one nmap; downstream branches all hang off the single nmap scan.
     assert wf.steps[0].tool == "masscan"
-    scan = wf.steps[1]
+    scan = next(s for s in wf.steps if s.id == "scan")
     assert scan.tool == "nmap" and scan.foreach == "subnet/24" and scan.foreach_target == "subnet"
     assert [s.tool for s in wf.steps].count("nmap") == 1
     shots = next(s for s in wf.steps if s.id == "shots")

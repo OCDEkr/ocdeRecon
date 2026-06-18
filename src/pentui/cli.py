@@ -53,7 +53,8 @@ def _run_workflow_command(args: argparse.Namespace) -> int:
         WorkflowStep,
         build_workflow_registry,
     )
-    from pentui.persistence.engagement import open_engagement
+    from pentui.persistence.db import EncryptionError
+    from pentui.persistence.engagement import is_encrypted, open_engagement
     from pentui.persistence.repositories import ScopeRuleRepository
 
     config = AppConfig()
@@ -77,7 +78,19 @@ def _run_workflow_command(args: argparse.Namespace) -> int:
         print(f"engagement {args.engagement!r} not found; existing: {listed}", file=sys.stderr)
         return 2
 
-    engagement = open_engagement(config, args.engagement)
+    passphrase = os.environ.get("PENTUI_DB_PASSPHRASE")
+    if is_encrypted(config, args.engagement) and not passphrase:
+        print(
+            f"engagement {args.engagement!r} is encrypted; "
+            "set PENTUI_DB_PASSPHRASE to run it headless",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        engagement = open_engagement(config, args.engagement, passphrase=passphrase)
+    except EncryptionError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     registry = build_registry(config.user_tools_dir)
     rules = ScopeRuleRepository(engagement.conn).list_for_project(engagement.project_id)
 
