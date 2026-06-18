@@ -245,8 +245,9 @@ A **workflow** is a set of **steps**; each step names a tool (+ profile/options)
 and declares which steps it runs `after`. Edges form a directed acyclic graph,
 so one upstream step can fan out to several downstream tools. A step's own
 `foreach` fan-out (e.g. per-/24 nmap scans) runs **concurrently, bounded** by
-`max_parallel`/`config.max_concurrent_scans`; independent *branches* still run
-sequentially in topological order (parallel branches deferred — see §14).
+`max_parallel`/`config.max_concurrent_scans`; independent *branches* also run
+**concurrently** — each step launches once the steps it runs `after` are
+terminal — bounded by a run-wide semaphore (REST steps exempt). See §14.
 
 ### 7.2 Data handoff — query the unified model
 A step gets its targets either from the project list or by **querying normalized
@@ -474,20 +475,26 @@ Done when, entirely from the TUI, an operator can:
 - **Workflow resumability vs. scheduling:** **persist run state for resume from
   the start** (cheap — `StepRun` is stored anyway); **defer scheduled/recurring
   runs** entirely.
-- **NSE / vuln → Findings (PoC):** capture NSE script output as **low-fidelity
-  findings** (title + raw detail, severity `info`/`unknown`). Proper severity
-  normalization is a later phase.
+- **NSE / vuln → Findings:** capture NSE script output as findings (title + raw
+  detail). Severity is **normalized** by `core/severity.py` — a `vulners` CVSS
+  score, a "VULNERABLE" state line, or a high-signal script id raises a finding
+  above the `info` default (conservative: unrecognized scripts stay `info`).
 - **Theming:** default **blue-and-white** palette, with an **optional
   color-blind-safe palette** selectable by the operator. Keybindings/broader
   accessibility use Textual defaults for now.
 
+### Resolved (implemented after the initial deferral)
+- **Parallel execution of independent *branches*** — a readiness-driven scheduler
+  launches each step as soon as its `after` deps are terminal; a run-wide
+  semaphore bounds total local scans (REST steps exempt). Foreach fan-out within
+  a step remains bounded-parallel as before.
+- **Nessus API keys in the TUI** — Settings screen exposes URL/access/secret
+  fields (env `NESSUS_*` still override).
+
 ### Deferred to later phases
-- Parallel execution of independent *branches* (foreach fan-out within a step is
-  already bounded-parallel; cross-branch parallelism is not).
 - SQLCipher encrypted engagements (passphrase to open).
 - PyInstaller single-binary distribution.
 - Scheduled / recurring workflow runs.
-- Severity normalization for vuln findings; richer NSE mapping.
 - Custom keybindings and broader accessibility polish.
 
 ---
