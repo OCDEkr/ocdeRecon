@@ -57,6 +57,23 @@ def test_nse_scripts_become_findings():
     assert finding.detail == "2048 aa:bb:cc"
 
 
+def test_vuln_script_severity_is_normalized(tmp_path):
+    # A port-level vuln script that reports VULNERABLE is raised above info.
+    xml = tmp_path / "vuln.xml"
+    xml.write_text(
+        '<?xml version="1.0"?>\n'
+        '<nmaprun><host><status state="up"/>'
+        '<address addr="10.0.0.9" addrtype="ipv4"/>'
+        '<ports><port protocol="tcp" portid="445"><state state="open"/>'
+        '<script id="smb-vuln-ms17-010" output="State: VULNERABLE"/>'
+        "</port></ports></host></nmaprun>\n"
+    )
+    result = parse(_ctx(str(xml)))
+    finding = next(f for f in result.findings if "smb-vuln-ms17-010" in f.title)
+    assert finding.severity is Severity.CRITICAL
+    assert finding.host_ip == "10.0.0.9"
+
+
 def test_missing_or_bad_artifact_returns_empty():
     assert parse(_ctx(None)).hosts == []
     assert parse(_ctx("/nonexistent/file.xml")).hosts == []
