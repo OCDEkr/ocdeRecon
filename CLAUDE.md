@@ -25,7 +25,9 @@ in-memory registry is reloaded so it shows up immediately.
 A manifest option may set `file_input: true` (with `file_glob`); pointing it at a
 directory **batches the run once per matching file** (e.g. gowitness `-f` over a
 folder of nmap XMLs). A workflow step may `foreach: subnet/24` to **fan out into
-one run per /24** of the hosts its `input` selects, and `file_from: {step, flag}`
+one run per /24** of the hosts its `input` selects (or `foreach: host` for **one
+run per individual host** — how single-target tools like cewl/sublist3r fan out
+over many hosts), and `file_from: {step, flag}`
 to feed a downstream file-input flag the **collected artifacts** of an upstream
 step (each run's artifact is copied into a per-step dir). The shipped
 `engagement-recon` workflow chains masscan → per-/24 nmap → gowitness this way
@@ -41,8 +43,12 @@ be stopped with `s` (the process group is terminated). Creating an engagement ca
 dropdown on the new-engagement form (needs initial targets; otherwise launch from
 the dashboard with `w`). The workflow monitor rings a bell + notifies on finish.
 Shipped tool manifests: nmap, masscan, nslookup, gowitness, nxc, responder,
-ntlmrelayx, mitm6, nessus. Deferred to future work (§14): SQLCipher-encrypted
-engagements, PyInstaller packaging, scheduled runs.
+ntlmrelayx, mitm6, nessus. An engagement DB can be **SQLCipher-encrypted**
+(per-engagement opt-in: set a passphrase on the new-engagement form; opening a
+🔒 engagement prompts to unlock — headless via `PENTUI_DB_PASSPHRASE`). Workflows
+can run **headless** with `pentui run-workflow <engagement> <workflow>` (no TUI;
+for cron/CI), and a **PyInstaller single-binary** build ships via `pentui.spec`.
+Deferred to future work (§14): an in-app recurring-schedule UI.
 
 **[`PROJECT.md`](./PROJECT.md) is the source of truth** for design and scope.
 Read it before non-trivial work. Section references below (§) point into it.
@@ -59,6 +65,10 @@ pentui                                  # or: python -m pentui.cli
 textual run --dev src/pentui/app.py     # dev mode with inspector
 textual console                         # live log/event console (separate terminal)
 
+# run a workflow headless (no TUI) — for cron/systemd/CI; engagement must exist
+pentui run-workflow <engagement> <workflow> [--unattended]
+#   PENTUI_SUDO_PASSWORD=... feeds sudo for root-requiring steps without a TTY
+
 # tests
 pytest                                          # all
 pytest tests/unit/test_db.py                    # one file
@@ -68,6 +78,9 @@ pytest tests/unit/test_db.py::test_init_db_creates_schema   # one test
 ruff check .        # lint
 ruff format .       # format
 mypy src            # type check (strict)
+
+# build a single-binary (bundles YAML manifests, Textual data, sqlcipher lib)
+pyinstaller pentui.spec        # -> dist/pentui (onefile)
 ```
 
 ## Architecture

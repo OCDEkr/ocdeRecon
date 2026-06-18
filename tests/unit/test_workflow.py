@@ -50,6 +50,30 @@ def test_unknown_dependency_rejected():
         _wf([{"id": "a", "tool": "x", "after": ["ghost"]}])
 
 
+def test_foreach_host_is_accepted():
+    wf = _wf(
+        [
+            {
+                "id": "words",
+                "tool": "cewl",
+                "foreach": "host",
+                "input": {"from": "hosts", "where": {"host_state": "up"}, "as": "target_urls"},
+            }
+        ]
+    )
+    assert wf.steps[0].foreach == "host"
+
+
+def test_foreach_requires_input_query():
+    with pytest.raises(ValueError):
+        _wf([{"id": "a", "tool": "x", "foreach": "host"}])
+
+
+def test_invalid_foreach_value_rejected():
+    with pytest.raises(ValueError):
+        _wf([{"id": "a", "tool": "x", "foreach": "rack/3", "input": {"from": "hosts"}}])
+
+
 def test_duplicate_ids_rejected():
     with pytest.raises(ValueError):
         _wf([{"id": "a", "tool": "x"}, {"id": "a", "tool": "y"}])

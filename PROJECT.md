@@ -245,8 +245,9 @@ A **workflow** is a set of **steps**; each step names a tool (+ profile/options)
 and declares which steps it runs `after`. Edges form a directed acyclic graph,
 so one upstream step can fan out to several downstream tools. A step's own
 `foreach` fan-out (e.g. per-/24 nmap scans) runs **concurrently, bounded** by
-`max_parallel`/`config.max_concurrent_scans`; independent *branches* still run
-sequentially in topological order (parallel branches deferred — see §14).
+`max_parallel`/`config.max_concurrent_scans`; independent *branches* also run
+**concurrently** — each step launches once the steps it runs `after` are
+terminal — bounded by a run-wide semaphore (REST steps exempt). See §14.
 
 ### 7.2 Data handoff — query the unified model
 A step gets its targets either from the project list or by **querying normalized
@@ -466,28 +467,38 @@ Done when, entirely from the TUI, an operator can:
     condition/materializer sets as needs arise.
 - **Persistence library:** stdlib **`sqlite3` + a thin repository layer** to
   start; revisit SQLModel only if relationship/query complexity grows.
-- **DB encryption at rest:** rely on **OS-level protection** (LUKS / file perms)
-  for the PoC and document it; revisit **SQLCipher** (passphrase-protected
-  engagements) in a later phase.
-- **Packaging:** **`pipx install`** during development; add a **PyInstaller
-  single-binary** build later to avoid per-box venv management.
+- **DB encryption at rest:** **implemented** via SQLCipher (`sqlcipher3-binary`,
+  bundled native lib). Per-engagement opt-in: set a passphrase when creating the
+  engagement; a `.encrypted` sidecar marker records the choice (you must know it
+  *before* opening), and opening prompts to unlock (`PENTUI_DB_PASSPHRASE` for
+  headless). Plaintext engagements still rely on OS-level protection.
+- **Packaging:** **`pipx install`** during development; a **PyInstaller
+  single-binary** build (`pentui.spec` → `pyinstaller pentui.spec`) is also
+  available, bundling the YAML manifests, Textual data, and the SQLCipher native
+  lib so it runs without a per-box venv.
 - **Workflow resumability vs. scheduling:** **persist run state for resume from
-  the start** (cheap — `StepRun` is stored anyway); **defer scheduled/recurring
-  runs** entirely.
-- **NSE / vuln → Findings (PoC):** capture NSE script output as **low-fidelity
-  findings** (title + raw detail, severity `info`/`unknown`). Proper severity
-  normalization is a later phase.
+  the start** (cheap — `StepRun` is stored anyway). A headless
+  `pentui run-workflow` entrypoint exists so external schedulers (cron/systemd/CI)
+  can drive runs; an in-app recurring-schedule UI stays deferred.
+- **NSE / vuln → Findings:** capture NSE script output as findings (title + raw
+  detail). Severity is **normalized** by `core/severity.py` — a `vulners` CVSS
+  score, a "VULNERABLE" state line, or a high-signal script id raises a finding
+  above the `info` default (conservative: unrecognized scripts stay `info`).
 - **Theming:** default **blue-and-white** palette, with an **optional
   color-blind-safe palette** selectable by the operator. Keybindings/broader
   accessibility use Textual defaults for now.
 
+### Resolved (implemented after the initial deferral)
+- **Parallel execution of independent *branches*** — a readiness-driven scheduler
+  launches each step as soon as its `after` deps are terminal; a run-wide
+  semaphore bounds total local scans (REST steps exempt). Foreach fan-out within
+  a step remains bounded-parallel as before.
+- **Nessus API keys in the TUI** — Settings screen exposes URL/access/secret
+  fields (env `NESSUS_*` still override).
+
 ### Deferred to later phases
-- Parallel execution of independent *branches* (foreach fan-out within a step is
-  already bounded-parallel; cross-branch parallelism is not).
-- SQLCipher encrypted engagements (passphrase to open).
-- PyInstaller single-binary distribution.
-- Scheduled / recurring workflow runs.
-- Severity normalization for vuln findings; richer NSE mapping.
+- In-app recurring-schedule UI (headless `pentui run-workflow` exists for
+  cron/systemd/CI; an in-TUI scheduler is deferred).
 - Custom keybindings and broader accessibility polish.
 
 ---
@@ -550,6 +561,7 @@ can be prototyped as soon as Phase 2 is done).
   the `nmap → second tool` chain.
 - **Phase 5 — Reporting:** Markdown/HTML/JSON/CSV exporters (incl. workflow runs).
 - **Phase 6 — Polish:** more tools by manifest, concurrency/queue UX, themes
-  (default blue-and-white + optional color-blind-safe palette), and the deferred
-  items from §14 (SQLCipher, PyInstaller, scheduling).
+  (default blue-and-white + optional color-blind-safe palette). SQLCipher,
+  PyInstaller, and headless scheduling are now done (§14); the remaining deferred
+  item is an in-app recurring-schedule UI.
 ```

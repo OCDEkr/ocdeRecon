@@ -1,16 +1,19 @@
 """Nmap XML parser (PROJECT.md §6, §13).
 
 Parses nmap's ``-oX`` output into normalized hosts/ports/services, and maps NSE
-script output (host- and port-level ``<script>`` elements) into low-fidelity
-findings (severity ``info`` for the PoC; richer severity normalization is a later
-phase). Tolerant of missing elements — partial/interrupted scans still parse.
+script output (host- and port-level ``<script>`` elements) into findings. Script
+severity is normalized (:mod:`pentui.core.severity`): vuln scripts that report
+CVSS scores or a "VULNERABLE" state, and known high-signal scripts, are raised
+above the ``info`` default. Tolerant of missing elements — partial/interrupted
+scans still parse.
 """
 
 from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-from pentui.core.models import Finding, Host, Port, ScanResult, Service, Severity
+from pentui.core.models import Finding, Host, Port, ScanResult, Service
+from pentui.core.severity import normalize_nse_severity
 from pentui.parsers.base import ParseContext
 
 name = "nmap_xml"
@@ -50,12 +53,13 @@ def _script_findings(
     for script in parent.findall("script"):
         script_id = script.get("id") or "script"
         title = f"{script_id} on {port_label}" if port_label else script_id
+        output = script.get("output")
         findings.append(
             Finding(
                 source_tool="nmap",
-                severity=Severity.INFO,
+                severity=normalize_nse_severity(script_id, output),
                 title=title,
-                detail=script.get("output"),
+                detail=output,
                 host_ip=ip,
             )
         )

@@ -13,6 +13,7 @@ async def start_engagement(
     includes: str = "",
     excludes: str = "",
     targets: str = "",
+    passphrase: str = "",
     open_scan: bool = True,
     tool: str | None = None,
 ) -> None:
@@ -29,6 +30,7 @@ async def start_engagement(
     app.screen.query_one("#includes", Input).value = includes
     app.screen.query_one("#excludes", Input).value = excludes
     app.screen.query_one("#targets", Input).value = targets
+    app.screen.query_one("#passphrase", Input).value = passphrase
     await pilot.pause()
     await pilot.click("#create")
     await pilot.pause()
