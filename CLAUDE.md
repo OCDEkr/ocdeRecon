@@ -69,6 +69,14 @@ textual console                         # live log/event console (separate termi
 pentui run-workflow <engagement> <workflow> [--unattended]
 #   PENTUI_SUDO_PASSWORD=... feeds sudo for root-requiring steps without a TTY
 
+# provision GLOBAL settings (Nessus keys, scan-output root, theme/palette) into
+# ~/.config/pentui/settings.json — interactive wizard, or flag-driven for scripts
+pentui configure                                       # interactive (needs a TTY)
+pentui configure --nessus-url URL --nessus-access-key K --nessus-secret-key K
+#   Nessus keys are GLOBAL, not per-engagement — set them once before an
+#   auto-launched engagement-recon runs its nessus vuln-scan step.
+#   `./deploy.sh --configure` runs this wizard right after install.
+
 # tests
 pytest                                          # all
 pytest tests/unit/test_db.py                    # one file

@@ -13,6 +13,9 @@
 #   ./deploy.sh --with-tools    # also apt-install the wrapped CLI tools
 #   ./deploy.sh --venv          # install into ./.venv instead of pipx
 #   ./deploy.sh --dev           # editable venv install + dev extras (pytest/ruff/mypy)
+#   ./deploy.sh --configure     # after install, run the interactive setup wizard
+#                               # (Nessus keys, scan-output root, theme); on its own
+#                               # against an existing install it just (re)configures
 #   ./deploy.sh --help
 #
 # Per-user data lives outside this repo and is never touched:
@@ -28,6 +31,7 @@ cd "$SCRIPT_DIR"
 MIN_PY_MINOR=11          # requires-python >= 3.11 (see pyproject.toml)
 MODE="pipx"              # pipx | venv | dev
 WITH_TOOLS=0
+DO_CONFIGURE=0           # run the interactive setup wizard after install
 
 # External binaries pentui wraps -> Debian/Kali apt package that provides them.
 # (nessuscli is proprietary Tenable Nessus — install it manually if you need it.)
@@ -57,6 +61,7 @@ for arg in "$@"; do
     --with-tools) WITH_TOOLS=1 ;;
     --venv)       MODE="venv" ;;
     --dev)        MODE="dev" ;;
+    --configure)  DO_CONFIGURE=1 ;;
     -h|--help)    usage ;;
     *) die "unknown argument: $arg (try --help)" ;;
   esac
@@ -103,6 +108,14 @@ install_tools() {
 
 [ "$WITH_TOOLS" -eq 1 ] && install_tools
 
+# When `--configure` is the *only* flag and pentui is already installed, skip the
+# (re)install and just run the wizard — so updating keys later doesn't reinstall.
+RUN_INSTALL=1
+if [ "$DO_CONFIGURE" -eq 1 ] && [ "$#" -eq 1 ] && command -v pentui >/dev/null 2>&1; then
+  RUN_INSTALL=0
+  info "pentui already installed — skipping install, configuring only"
+fi
+
 # --- install pentui --------------------------------------------------------
 ensure_pipx() {
   if command -v pipx >/dev/null 2>&1; then return 0; fi
@@ -115,6 +128,7 @@ ensure_pipx() {
   "$PYTHON" -m pipx ensurepath >/dev/null 2>&1 || pipx ensurepath >/dev/null 2>&1 || true
 }
 
+if [ "$RUN_INSTALL" -eq 1 ]; then
 case "$MODE" in
   pipx)
     ensure_pipx
@@ -155,10 +169,35 @@ else
   ok "pentui installed in venv"
   info "run it with:  source .venv/bin/activate && pentui"
 fi
+fi   # RUN_INSTALL
+
+# --- optional: interactive configuration -----------------------------------
+# Locate the just-installed pentui and run its `configure` wizard, so global
+# settings (Nessus keys, scan-output root, theme) are provisioned before the
+# first engagement — auto-launched recon workflows pick the keys up from there.
+configure_pentui() {
+  local bin=""
+  case "$MODE" in
+    venv|dev) [ -x "$SCRIPT_DIR/.venv/bin/pentui" ] && bin="$SCRIPT_DIR/.venv/bin/pentui" ;;
+  esac
+  [ -n "$bin" ] || bin="$(command -v pentui 2>/dev/null || true)"
+  [ -n "$bin" ] || { [ -x "$HOME/.local/bin/pentui" ] && bin="$HOME/.local/bin/pentui"; }
+  if [ -z "$bin" ] || [ ! -x "$bin" ]; then
+    warn "could not locate the pentui executable to configure; run 'pentui configure' manually."
+    return
+  fi
+  echo
+  info "configuring pentui (Nessus keys, scan-output root, theme)"
+  "$bin" configure || warn "configuration did not complete; run 'pentui configure' later."
+}
+
+[ "$DO_CONFIGURE" -eq 1 ] && configure_pentui
 
 cat <<'EOF'
 
 Next steps
+  - Set or update global settings (Nessus keys, scan-output root, theme) anytime:
+        pentui configure
   - Root-requiring tools (masscan, responder, SYN scans) prompt once per
     session for sudo and elevate per-command. To run the whole app as root:
         sudo -E env "PATH=$PATH" "$(command -v pentui)"
