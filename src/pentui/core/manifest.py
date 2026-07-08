@@ -91,6 +91,14 @@ class OutputSpec(BaseModel):
     #: ``artifact``, but never the parsed artifact — they're side outputs.
     extra_artifacts: list[ArtifactSpec] = Field(default_factory=list)
     parser: str | None = None
+    #: Whether the tool writes a *directory* of output (screenshots, a DB, files
+    #: with fixed names) rather than a single target-named artifact. When True the
+    #: run gets its own per-scan subfolder (``scans/<tool>/<target>/``) so those
+    #: files never collide; when False (the default) the tool's artifact and log
+    #: land flat in the shared tool folder named after the target it scanned
+    #: (``scans/<tool>/<target>.xml`` + ``scans/<tool>/logs/<target>.log``),
+    #: which avoids a folder-per-target explosion on big fan-outs.
+    dir_output: bool = False
 
 
 class TargetSpec(BaseModel):

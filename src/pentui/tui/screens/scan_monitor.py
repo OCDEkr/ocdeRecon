@@ -62,6 +62,7 @@ class ScanMonitorScreen(Screen[None]):
         scan_dir: str,
         runs: list[tuple[str, list[str]]],
         *,
+        log_path: str | None = None,
         sudo_password: str | None = None,
     ) -> None:
         super().__init__()
@@ -69,6 +70,10 @@ class ScanMonitorScreen(Screen[None]):
         self.manifest = manifest
         self.scan = scan
         self.scan_dir = scan_dir
+        #: Where the aggregate stdout log is written. Defaults to
+        #: ``scan_dir/stdout.log`` (dir_output tools); flat-layout tools pass a
+        #: per-target path under ``scans/<tool>/logs/``.
+        self.log_path = log_path or str(Path(scan_dir) / "stdout.log")
         self.runs = runs
         self.sudo_password = sudo_password
         self._proc: Process | None = None
@@ -139,9 +144,12 @@ class ScanMonitorScreen(Screen[None]):
         scans.update(self.scan)
         self._spin = self.set_interval(0.4, self._tick)
 
-        log_path = Path(self.scan_dir) / "stdout.log"
+        log_path = Path(self.log_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log = log_path.open("w", encoding="utf-8")
+        # dir_output tools (gowitness) write their store relative to the cwd, so
+        # run them inside the scan folder; others keep pentui's own cwd.
+        cwd = self.scan_dir if self.manifest.output.dir_output else None
         exit_codes: list[int] = []
         try:
             for index, (label, argv) in enumerate(self.runs):
@@ -152,6 +160,7 @@ class ScanMonitorScreen(Screen[None]):
                 try:
                     result = await run_command(
                         argv,
+                        cwd=cwd,
                         on_line=self._emit,
                         on_start=self._on_proc,
                         stdin_data=self.sudo_password,

@@ -23,6 +23,9 @@ target:
 
 output:
   stream: stdout
+  # Fixed-named artifacts (wordlist.txt/emails.txt), so keep a per-run subfolder
+  # rather than flattening — a per-host fan-out would otherwise collide on names.
+  dir_output: true
   artifact:
     flag: "-w"
     path: "{scan_dir}/wordlist.txt"

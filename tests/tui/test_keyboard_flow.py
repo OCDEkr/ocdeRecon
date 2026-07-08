@@ -53,7 +53,7 @@ async def test_ctrl_r_runs_scan(tmp_path):
         status = str(app.screen.query_one("#status", Static).render())
         assert "Done" in status
 
-    logs = list((config.engagement_dir("kbdrun") / "scans").glob("**/stdout.log"))
+    logs = list((config.engagement_dir("kbdrun") / "scans").glob("**/logs/*.log"))
     assert logs and logs[0].read_text() == "hello world\n"
 
 

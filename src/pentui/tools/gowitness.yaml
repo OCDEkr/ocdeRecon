@@ -15,6 +15,7 @@ target:
 
 output:
   stream: stdout          # gowitness writes screenshots/DB to its own store
+  dir_output: true        # keep a per-run subfolder — it emits a dir of files, not one artifact
 
 options:
   - {flag: "-f", label: "Input (nmap XML, or a directory of them)", type: value,

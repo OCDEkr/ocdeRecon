@@ -126,12 +126,15 @@ def build_argv(
     extra_args: Sequence[str] | None = None,
     targets: Sequence[str] | None = None,
     scan_dir: str | Path | None = None,
+    name: str | None = None,
     sudo: bool = False,
 ) -> list[str]:
     """Assemble the argv for a tool run. ``sudo`` is prepended only if requested.
 
     Order: ``[sudo] binary <profile args> <option tokens> <extra_args>
     <artifact flags> <targets>``. ``extra_args`` are operator-authored raw tokens.
+    ``name`` overrides the ``{name}`` artifact stem (the caller-resolved,
+    collision-disambiguated label); when omitted it's derived from ``targets``.
     """
     # ``sudo -S`` reads the password from stdin (fed by run_command), which works
     # even when the process has no controlling terminal (workflow/detached runs).
@@ -153,7 +156,7 @@ def build_argv(
     # {name} lets a manifest name its artifact after the target it scanned
     # (e.g. nmap "{scan_dir}/{name}.xml" -> 192.168.10.0_24.xml). Falls back to
     # "scan" when there are no targets (file-input batches, listeners).
-    name = target_slug(targets or []) or "scan"
+    name = name if name is not None else (target_slug(targets or []) or "scan")
     if artifact is not None:
         argv.extend([artifact.flag, artifact.path.format(scan_dir=str(scan_dir), name=name)])
     for extra in extra_artifacts:
@@ -203,6 +206,7 @@ def build_runs(
     extra_args: Sequence[str] | None = None,
     targets: Sequence[str] | None = None,
     scan_dir: str | Path | None = None,
+    name: str | None = None,
     sudo: bool = False,
 ) -> list[tuple[str, list[str]]]:
     """Build the argv(s) for a run as ``(label, argv)`` pairs.
@@ -223,6 +227,7 @@ def build_runs(
                 extra_args=extra_args,
                 targets=targets,
                 scan_dir=scan_dir,
+                name=name,
                 sudo=sudo,
             )
             runs.append((path.name, argv))
@@ -234,6 +239,7 @@ def build_runs(
         extra_args=extra_args,
         targets=targets,
         scan_dir=scan_dir,
+        name=name,
         sudo=sudo,
     )
     return [("", argv)]
@@ -267,6 +273,7 @@ async def run_command(
     argv: Sequence[str],
     *,
     scan_dir: str | Path | None = None,
+    cwd: str | Path | None = None,
     on_line: Callable[[str], None] | None = None,
     on_start: Callable[[Process], None] | None = None,
     stdin_data: str | None = None,
@@ -275,12 +282,15 @@ async def run_command(
     """Run ``argv``, streaming merged stdout+stderr line-by-line.
 
     Each line is passed to ``on_line`` (if given) and teed to
-    ``<scan_dir>/stdout.log`` (if ``scan_dir`` given). ``on_start`` receives the
-    process so a caller can stop it (see ``terminate_process``). ``stdin_data`` is
-    written to the process's stdin then closed (used to feed ``sudo -S`` the
-    password). The process runs in its own session so stopping it reaches child
-    processes. Returns on exit; if the awaiting task is cancelled, the process is
-    terminated first.
+    ``<scan_dir>/stdout.log`` (if ``scan_dir`` given). ``cwd`` sets the process
+    working directory — used for tools that dump output files relative to the cwd
+    (e.g. gowitness screenshots/DB) so those land in the scan folder rather than
+    wherever pentui was launched. ``on_start`` receives the process so a caller
+    can stop it (see ``terminate_process``). ``stdin_data`` is written to the
+    process's stdin then closed (used to feed ``sudo -S`` the password). The
+    process runs in its own session so stopping it reaches child processes.
+    Returns on exit; if the awaiting task is cancelled, the process is terminated
+    first.
     """
     argv = list(argv)
     log_path: Path | None = None
@@ -299,6 +309,7 @@ async def run_command(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 env={**os.environ, **env} if env else None,
+                cwd=str(cwd) if cwd is not None else None,
                 start_new_session=True,
             )
         except FileNotFoundError as exc:
