@@ -55,6 +55,52 @@ def test_scan_dir_without_tool_is_flat(tmp_path):
     assert config.scan_dir("acme", 7) == config.engagement_dir("acme") / "scans" / "7"
 
 
+def test_scan_paths_flat_drops_artifact_in_tool_folder_and_log_in_logs(tmp_path):
+    config = _config(tmp_path)
+    paths = config.scan_paths("acme", 7, "nmap", targets=["192.168.10.0/24"])
+    tool_root = config.engagement_dir("acme") / "scans" / "nmap"
+    # No per-target subfolder: the tool folder is the scan dir, artifact named by target.
+    assert paths.scan_dir == tool_root
+    assert paths.name == "192.168.10.0_24"
+    assert paths.log_path == tool_root / "logs" / "192.168.10.0_24.log"
+
+
+def test_scan_paths_flat_disambiguates_a_rescan_by_scan_id(tmp_path):
+    config = _config(tmp_path)
+    first = config.scan_paths("acme", 7, "nmap", targets=["10.0.0.0/24"])
+    first.log_path.parent.mkdir(parents=True)
+    first.log_path.touch()  # a prior run already owns the clean name
+    second = config.scan_paths("acme", 8, "nmap", targets=["10.0.0.0/24"])
+    assert second.name == "10.0.0.0_24-8"
+    assert second.log_path.name == "10.0.0.0_24-8.log"
+    assert second.log_path != first.log_path
+
+
+def test_scan_paths_no_targets_falls_back_to_scan_id(tmp_path):
+    config = _config(tmp_path)
+    paths = config.scan_paths("acme", 7, "responder", targets=[])
+    assert paths.name == "7"
+    scans = config.engagement_dir("acme") / "scans"
+    assert paths.log_path == scans / "responder" / "logs" / "7.log"
+
+
+def test_scan_paths_dir_output_keeps_a_per_run_subfolder(tmp_path):
+    config = _config(tmp_path)
+    paths = config.scan_paths("acme", 7, "gowitness", targets=["10.0.0.0/24"], dir_output=True)
+    subfolder = config.engagement_dir("acme") / "scans" / "gowitness" / "10.0.0.0_24"
+    assert paths.scan_dir == subfolder
+    assert paths.log_path == subfolder / "stdout.log"
+
+
+def test_scan_paths_honours_output_root_override(tmp_path):
+    config = _config(tmp_path)
+    paths = config.scan_paths(
+        "acme", 3, "nmap", targets=["10.0.0.5"], output_root_override=Path("/eng/out")
+    )
+    assert paths.scan_dir == Path("/eng/out/acme/scans/nmap")
+    assert paths.log_path == Path("/eng/out/acme/scans/nmap/logs/10.0.0.5.log")
+
+
 def test_engagement_exclude_file_lives_under_the_engagement_dir(tmp_path):
     config = _config(tmp_path)
     assert config.engagement_exclude_file("acme") == config.engagement_dir("acme") / "excludes.txt"

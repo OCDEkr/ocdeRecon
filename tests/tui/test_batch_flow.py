@@ -33,6 +33,7 @@ def _config(tmp_path: Path) -> AppConfig:
     script.chmod(0o755)
     (config.user_tools_dir / "batchshot.yaml").write_text(
         f"name: batchshot\nbinary: {script}\ntarget: {{mode: append}}\n"
+        f"output: {{dir_output: true}}\n"
         f"options:\n"
         f"  - {{flag: '-f', label: Input, type: value, file_input: true, file_glob: '*.xml'}}\n"
     )

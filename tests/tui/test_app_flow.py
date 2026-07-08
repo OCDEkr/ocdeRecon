@@ -53,6 +53,7 @@ async def test_run_streams_to_completion(tmp_path):
         status = str(app.screen.query_one("#status", Static).render())
         assert "Done" in status
 
-    logs = list((config.engagement_dir("streamy") / "scans").glob("**/stdout.log"))
+    # echo is a flat-layout tool: its log lands in scans/echo/logs/<target>.log.
+    logs = list((config.engagement_dir("streamy") / "scans").glob("**/logs/*.log"))
     assert len(logs) == 1
     assert logs[0].read_text() == "hello world\n"

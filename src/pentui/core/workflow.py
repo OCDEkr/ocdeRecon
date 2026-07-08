@@ -29,7 +29,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
-from pentui.config import AppConfig, target_slug
+from pentui.config import AppConfig
 from pentui.core.executor import ExecutorError, requires_root
 from pentui.core.manifest import ToolKind, ToolManifest, ToolProfile
 from pentui.core.models import (
@@ -552,11 +552,12 @@ class WorkflowEngine:
             )
         )
         assert scan.id is not None
-        scan_dir = self.config.scan_dir(
+        paths = self.config.scan_paths(
             self.engagement.name,
             scan.id,
-            tool=step.tool,
-            leaf=target_slug(targets),
+            step.tool,
+            targets=targets,
+            dir_output=manifest.output.dir_output,
             output_root_override=self.engagement.output_root_override,
         )
         prefix = f"[{label}] " if label else ""
@@ -582,9 +583,11 @@ class WorkflowEngine:
             options=options,
             extra_args=extra_args,
             targets=targets,
-            scan_dir=scan_dir,
+            scan_dir=paths.scan_dir,
             sudo=use_sudo,
             sudo_password=self.sudo_password,
+            log_path=paths.log_path,
+            name=paths.name,
             scan_name=scan_name,
         )
         runner = get_runner(manifest, self.config)

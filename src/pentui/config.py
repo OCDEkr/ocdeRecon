@@ -53,6 +53,20 @@ class NessusSettings:
         return bool(self.access_key and self.secret_key)
 
 
+@dataclass(slots=True)
+class ScanPaths:
+    """Resolved on-disk locations for one scan run (see :meth:`AppConfig.scan_paths`).
+
+    ``scan_dir`` is the base dir handed to the tool (``{scan_dir}`` in artifact
+    templates and where a target file is written); ``log_path`` is where the run's
+    stdout log goes; ``name`` is the ``{name}`` stem the artifact is named after.
+    """
+
+    scan_dir: Path
+    log_path: Path
+    name: str
+
+
 def _xdg_dir(env_var: str, default: Path) -> Path:
     value = os.environ.get(env_var)
     return Path(value) if value else default
@@ -152,6 +166,40 @@ class AppConfig:
             return base / str(scan_id)
         candidate = base / leaf
         return candidate if not candidate.exists() else base / f"{leaf}-{scan_id}"
+
+    def scan_paths(
+        self,
+        engagement: str,
+        scan_id: int,
+        tool: str,
+        *,
+        targets: Sequence[str],
+        dir_output: bool = False,
+        output_root_override: Path | None = None,
+    ) -> ScanPaths:
+        """Resolve where one run's artifact and log go, in the *flat* layout.
+
+        A normal tool drops its target-named artifact straight into the shared
+        tool folder (``scans/<tool>/192.168.10.0_24.xml``) and its log under a
+        ``logs/`` sibling (``scans/<tool>/logs/192.168.10.0_24.log``) — so a big
+        per-/24 fan-out fills one folder with files instead of spawning a folder
+        per subnet. A re-scan of the same target is disambiguated with
+        ``-<scan_id>`` (checked against the log) so an earlier run is never
+        clobbered. ``dir_output`` tools (gowitness) instead keep their own
+        per-scan subfolder — see :meth:`scan_dir` — because they emit whole
+        directories of fixed-named files that would collide when flattened.
+        """
+        slug = target_slug(targets)
+        if dir_output:
+            scan_dir = self.scan_dir(
+                engagement, scan_id, tool, leaf=slug, output_root_override=output_root_override
+            )
+            return ScanPaths(scan_dir, scan_dir / "stdout.log", slug or "scan")
+        root = self.tool_output_root(engagement, tool, output_root_override=output_root_override)
+        stem = slug or str(scan_id)
+        if (root / "logs" / f"{stem}.log").exists():
+            stem = f"{stem}-{scan_id}"
+        return ScanPaths(root, root / "logs" / f"{stem}.log", stem)
 
     def reports_dir(self, engagement: str) -> Path:
         """Where exported reports are written for an engagement."""

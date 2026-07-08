@@ -28,7 +28,7 @@ from textual.widgets import (
     Static,
 )
 
-from pentui.config import AppConfig, target_slug
+from pentui.config import AppConfig
 from pentui.core.executor import (
     ExecutorError,
     build_argv,
@@ -309,16 +309,16 @@ class ToolConfigScreen(Screen[None]):
             )
         )
         assert scan.id is not None
-        name = target_slug(targets)
-        scan_dir = str(
-            self.config.scan_dir(
-                self.engagement.name,
-                scan.id,
-                tool=self.manifest.name,
-                leaf=name,
-                output_root_override=self.engagement.output_root_override,
-            )
+        paths = self.config.scan_paths(
+            self.engagement.name,
+            scan.id,
+            self.manifest.name,
+            targets=targets,
+            dir_output=self.manifest.output.dir_output,
+            output_root_override=self.engagement.output_root_override,
         )
+        scan_dir = str(paths.scan_dir)
+        name = paths.name
         # Materialize the engagement-wide exclude file so a tool that supports
         # --excludefile honors out-of-scope ranges (see _exclude_args for the flag).
         if self.manifest.exclude_flag:
@@ -335,6 +335,7 @@ class ToolConfigScreen(Screen[None]):
             extra_args=[*self._extra_args(), *self._exclude_args()],
             targets=targets,
             scan_dir=scan_dir,
+            name=name,
             sudo=use_sudo,
         )
         note = f"   (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
@@ -357,6 +358,7 @@ class ToolConfigScreen(Screen[None]):
                 scan,
                 scan_dir,
                 runs,
+                log_path=str(paths.log_path),
                 sudo_password=sudo_password,
             )
         )

@@ -46,6 +46,13 @@ class RunRequest:
     scan_dir: Path
     sudo: bool
     sudo_password: str | None = None
+    #: Where the run's stdout log is written; defaults to ``scan_dir/stdout.log``
+    #: when unset. The engine sets it so flat-layout runs (which share the tool
+    #: folder) get a per-target log under ``scans/<tool>/logs/``.
+    log_path: Path | None = None
+    #: The ``{name}`` artifact stem — the caller-resolved, disambiguated target
+    #: label. Defaults to ``target_slug(targets)`` when unset.
+    name: str | None = None
     #: Override the scan name (REST tools only); ignored by ProcessRunner.
     scan_name: str | None = None
 
@@ -82,6 +89,7 @@ class ProcessRunner:
     """Runs a tool as an argv subprocess — the default for every manifest."""
 
     def prepare(self, req: RunRequest) -> RunPlan:
+        name = req.name or target_slug(req.targets) or "scan"
         runs = build_runs(
             req.manifest,
             profile=req.profile,
@@ -89,11 +97,11 @@ class ProcessRunner:
             extra_args=req.extra_args,
             targets=req.targets,
             scan_dir=str(req.scan_dir),
+            name=name,
             sudo=req.sudo,
         )
         note = f"  (+{len(runs) - 1} more files)" if len(runs) > 1 else ""
         artifact = req.manifest.output.artifact
-        name = target_slug(req.targets) or "scan"
         artifact_path = (
             artifact.path.format(scan_dir=str(req.scan_dir), name=name)
             if artifact is not None
@@ -109,8 +117,12 @@ class ProcessRunner:
     async def execute(
         self, req: RunRequest, plan: RunPlan, *, on_line: OnLine, on_marker: OnMarker
     ) -> RunResult:
-        log_path = req.scan_dir / "stdout.log"
+        log_path = req.log_path or req.scan_dir / "stdout.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Tools that emit a directory of output (gowitness) write it relative to
+        # the cwd, so run them *in* their scan folder; single-artifact tools use
+        # an explicit output path and keep pentui's own cwd.
+        cwd = req.scan_dir if req.manifest.output.dir_output else None
         exit_codes: list[int] = []
         with log_path.open("w", encoding="utf-8") as log:
 
@@ -125,6 +137,7 @@ class ProcessRunner:
                 try:
                     result = await run_command(
                         argv,
+                        cwd=cwd,
                         on_line=tee,
                         stdin_data=req.sudo_password if req.sudo else None,
                     )
@@ -181,10 +194,11 @@ class RestRunner:
         self._client_factory = client_factory or _make_nessus_client
 
     def prepare(self, req: RunRequest) -> RunPlan:
-        artifact_path = str(req.scan_dir / f"{target_slug(req.targets) or 'nessus'}.nessus")
+        stem = req.name or target_slug(req.targets) or "nessus"
+        artifact_path = str(req.scan_dir / f"{stem}.nessus")
         n = len(req.targets)
         settings = self.config.nessus_settings()
-        name = req.scan_name or f"pentui {req.scan_dir.name}"
+        name = req.scan_name or f"pentui {stem}"
         return RunPlan(
             command_str=f"[nessus REST] scan {n} target(s) as {name!r} via {settings.url}",
             args=[],
@@ -195,7 +209,7 @@ class RestRunner:
         self, req: RunRequest, plan: RunPlan, *, on_line: OnLine, on_marker: OnMarker
     ) -> RunResult:
         settings = self.config.nessus_settings()
-        log_path = req.scan_dir / "stdout.log"
+        log_path = req.log_path or req.scan_dir / "stdout.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         if not settings.configured:
@@ -217,7 +231,7 @@ class RestRunner:
 
             on_marker(plan.command_str)
             try:
-                name = req.scan_name or f"pentui {req.scan_dir.name}"
+                name = req.scan_name or f"pentui {req.name or req.scan_dir.name}"
                 scan_id = await client.launch(
                     req.targets, name=name, settings=_nessus_settings(req.options)
                 )

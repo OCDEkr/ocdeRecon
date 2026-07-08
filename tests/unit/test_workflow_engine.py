@@ -51,8 +51,8 @@ def _setup(tmp_path: Path):
     tools = tmp_path / "tools"
     tools.mkdir()
     (tools / "fakenmap.yaml").write_text(
-        f"name: fakenmap\nbinary: {script}\ntarget: {{mode: append}}\n"
-        f"output: {{artifact: {{flag: '-oX', path: '{{scan_dir}}/nmap.xml'}}, parser: nmap_xml}}\n"
+        f"name: fakenmap\nbinary: {script}\ntarget: {{mode: append}}\noutput:\n"
+        f"  artifact: {{flag: '-oX', path: '{{scan_dir}}/{{name}}.xml'}}\n  parser: nmap_xml\n"
     )
     (tools / "echo.yaml").write_text("name: echo\nbinary: echo\ntarget: {mode: append}\n")
     registry = ToolRegistry()
@@ -95,8 +95,10 @@ async def test_chain_feeds_one_tool_into_the_next(tmp_path):
     # The scan folder is named after the target it ran against, so glob for the log
     # rather than reconstruct the leaf name.
     steps = {s.step_id: s for s in StepRunRepository(eng.conn).list_for_run(run.id)}
+    # echo is a flat-layout tool: its log lands in scans/echo/logs/<target>.log,
+    # not a per-target subfolder.
     shots_root = config.tool_output_root(eng.name, steps["shots"].tool)
-    (shots_log,) = shots_root.glob("*/stdout.log")
+    (shots_log,) = (shots_root / "logs").glob("*.log")
     assert shots_log.read_text().strip() == "http://10.0.0.1:80"
 
 
@@ -132,7 +134,8 @@ def _fanout_setup(tmp_path: Path):
     shot.write_text(FAKE_SHOT)
     shot.chmod(0o755)
     (tmp_path / "tools" / "fakeshot.yaml").write_text(
-        f"name: fakeshot\nbinary: {shot}\ntarget: {{mode: append}}\noptions:\n"
+        f"name: fakeshot\nbinary: {shot}\ntarget: {{mode: append}}\n"
+        f"output: {{dir_output: true}}\noptions:\n"
         f"  - {{flag: '-f', label: in, type: value, file_input: true, file_glob: '*.xml'}}\n"
     )
     registry.load_dir(tmp_path / "tools")
@@ -178,6 +181,14 @@ async def test_per_subnet_fanout_then_batch_gowitness(tmp_path):
         config.scan_dir(eng.name, steps["shots"].scan_id, tool=steps["shots"].tool) / "stdout.log"
     ).read_text()
     assert "10.0.1.0_24.xml" in shots_log and "10.0.2.0_24.xml" in shots_log
+
+    # Flat layout: the fan-out fills ONE nmap folder with target-named XMLs +
+    # a logs/ dir, instead of a subfolder per /24 (the old folder explosion).
+    nmap_root = config.tool_output_root(eng.name, "fakenmap")
+    subdirs = sorted(p.name for p in nmap_root.iterdir() if p.is_dir())
+    assert subdirs == ["logs"]
+    assert len(list(nmap_root.glob("*.xml"))) == 2  # one per /24, named by target
+    assert len(list((nmap_root / "logs").glob("*.log"))) == 2
 
 
 def _fanout_step(target_mode: str) -> WorkflowStep:
