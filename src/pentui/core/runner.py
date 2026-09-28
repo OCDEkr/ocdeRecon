@@ -161,7 +161,10 @@ def _make_nessus_client(settings: NessusSettings) -> NessusClient:
     import httpx
 
     assert settings.access_key is not None and settings.secret_key is not None
-    http = httpx.AsyncClient(base_url=settings.url, verify=False, timeout=30.0)  # noqa: S501
+    # Nessus can take well over 30s to answer POST /scans (large target lists,
+    # busy scanner), so allow a long read while keeping connects snappy.
+    timeout = httpx.Timeout(30.0, read=300.0)
+    http = httpx.AsyncClient(base_url=settings.url, verify=False, timeout=timeout)  # noqa: S501
     return NessusClient(settings.url, settings.access_key, settings.secret_key, http)
 
 
