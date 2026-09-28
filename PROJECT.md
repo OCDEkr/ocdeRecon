@@ -121,7 +121,8 @@ nmapTUI/
       registry.py            # discover/load manifests, parsers, workflow defs
       executor.py            # async subprocess runner: argv build, stream, sudo
       scan_manager.py        # tracks running steps, concurrency, queue
-      scope.py               # scope rule evaluation + override audit
+      scope.py               # scope eval (canonical IP ranges) + excludefile render
+      validators.py          # value/target validation (ports, IP/CIDR/range/host)
     parsers/
       base.py                # Parser protocol + ParseContext
       nmap_xml.py            # Nmap XML → ScanResult
@@ -334,7 +335,7 @@ workflows.
 
 ```
 project (id, name, client, notes, created_at)
-  └─ scope_rule (id, project_id, value, kind)            kind: include|exclude (CIDR/host)
+  └─ scope_rule (id, project_id, value, kind)            kind: include|exclude (IP/CIDR/range/host)
   └─ target (id, project_id, value, source, added_at)    source: manual|file|chained|project
   └─ scan (id, project_id, tool, profile, command_str, args_json,
             status, exit_code, ran_as_root, started_at, finished_at,
@@ -384,16 +385,36 @@ manual single runs and individual workflow steps.
    extras queue. Each is a cancellable Textual worker.
 
 **Command-injection safety:** argv lists only; validate value inputs; reject
-shell metacharacters in free-text that reaches argv. Workflow-materialized
-targets are validated the same way before use.
+shell metacharacters in free-text that reaches argv. Targets (typed at entry,
+and materialized by workflow steps) pass the same `validate_target` check —
+a well-formed IP/CIDR/range/hostname, no shell metacharacters — before use.
 
 ---
 
 ## 10. Scope Enforcement
 
-- Each project defines `scope_rule`s: `include`/`exclude` CIDRs or hosts.
-- Before any scan or workflow step, targets are expanded and checked with
-  Python's `ipaddress` module: must match an `include`, not match an `exclude`.
+- Each project defines `scope_rule`s: `include`/`exclude` entries, each a single
+  IP, CIDR, **IP range** (full begin-end `10.0.5.17-10.3.200.4` or last-octet
+  shorthand `192.168.1.10-20`), or hostname.
+- Numeric values are normalized to a canonical `(start, end)` integer range by
+  `scope.parse_range`, so scoping never depends on a syntax that nmap and masscan
+  happen to share. A target range is in scope when it sits **wholly within** an
+  `include` and **not wholly within** an `exclude`; a range that merely *contains*
+  a smaller excluded range stays in scope (an in-scope range with a carve-out
+  hole, honored at scan time — one excluded `/32` never voids a whole `/16`).
+  Hostnames match a rule exactly or as a subdomain; no DNS resolution is done.
+- **Exclude file** (`--excludefile`, the second line of defence behind
+  classification, needed because a per-/24 fan-out scans a whole in-scope CIDR):
+  numeric excludes are rendered as **CIDR blocks** via
+  `ipaddress.summarize_address_range` — the one syntax both nmap and masscan
+  accept — so an arbitrary range maps to a minimal CIDR set valid for either tool
+  (a single IP stays bare; a hostname passes through verbatim). One
+  engagement-wide file serves every tool.
+- **Validation at entry:** scope-rule and target fields are validated as they're
+  typed (`core.validators.validate_target`, surfaced in the TUI by
+  `TargetListValidator`) — a malformed value like `10.0.0.5-1` is rejected up
+  front (live red border + a blocking submit check) instead of silently falling
+  through to the hostname path where it would never match.
 - Manual run, out-of-scope → **blocked**, with an explicit logged override path.
 - Workflow step, out-of-scope target → **skipped and logged** (the rest of the
   step's in-scope targets proceed); never silently scanned.
@@ -495,6 +516,16 @@ Done when, entirely from the TUI, an operator can:
   a step remains bounded-parallel as before.
 - **Nessus API keys in the TUI** — Settings screen exposes URL/access/secret
   fields (env `NESSUS_*` still override).
+- **Cross-tool IP-range syntax** — nmap (octet shorthand `192.168.1.10-20`) and
+  masscan (full begin-end `10.0.5.17-10.3.200.4`) disagree on range notation, so
+  no single string satisfies both. Resolved by *not* storing tool syntax:
+  `scope.parse_range` canonicalizes every numeric value to a `(start, end)`
+  integer range, classification uses integer containment, and the shared
+  `--excludefile` is rendered as CIDR (the one syntax both accept). See §10.
+- **Input validation for IP-like fields** — scope-rule and target entry fields
+  validate each token against `validate_target` (IP/CIDR/range/hostname, no shell
+  metacharacters), so a malformed value is rejected at entry rather than stored
+  and silently mishandled downstream. See §10.
 
 ### Deferred to later phases
 - In-app recurring-schedule UI (headless `pentui run-workflow` exists for
