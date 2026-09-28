@@ -57,6 +57,7 @@ from pentui.persistence.repositories import (
     TargetRepository,
 )
 from pentui.tui.screens.modals import ScopeBlockModal, TextPromptModal
+from pentui.tui.validators import TargetListValidator, check_target_list
 
 if TYPE_CHECKING:
     from pentui.app import PentuiApp
@@ -118,7 +119,11 @@ class ToolConfigScreen(Screen[None]):
         )
         yield Horizontal(
             Label("Targets:"),
-            Input(placeholder="e.g. 10.0.0.0/24 scanme.example", id="targets"),
+            Input(
+                placeholder="e.g. 10.0.0.0/24 scanme.example",
+                id="targets",
+                validators=[TargetListValidator()],
+            ),
             classes="field",
         )
         yield Static("↑/↓ move between fields", classes="hint")
@@ -279,6 +284,10 @@ class ToolConfigScreen(Screen[None]):
 
         options = self._current_options()
         targets = self._current_targets()
+        target_error = check_target_list(self.query_one("#targets", Input).value)
+        if target_error is not None:
+            self.notify(target_error, severity="error", title="Invalid target")
+            return
         # A file-input option pointed at a directory batches once per matching file.
         batch = file_input_batch(self.manifest, options)
         if batch is not None and not batch:

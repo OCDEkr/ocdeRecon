@@ -35,6 +35,7 @@ from pentui.persistence.db import EncryptionError
 from pentui.persistence.engagement import Engagement, is_encrypted, open_engagement
 from pentui.persistence.repositories import ScopeRuleRepository, TargetRepository
 from pentui.tui.screens.modals import ConfirmModal, TextPromptModal
+from pentui.tui.validators import TargetListValidator, check_target_list
 
 if TYPE_CHECKING:
     from pentui.app import PentuiApp
@@ -85,10 +86,23 @@ class ProjectSelectScreen(Screen[None]):
             yield Input(placeholder="name (letters, digits, - or _)", id="name", classes="field")
             yield Input(placeholder="client (optional)", id="client", classes="field")
             yield Input(
-                placeholder="in-scope, e.g. 10.0.0.0/24 app.example", id="includes", classes="field"
+                placeholder="in-scope, e.g. 10.0.0.0/24 app.example",
+                id="includes",
+                classes="field",
+                validators=[TargetListValidator()],
             )
-            yield Input(placeholder="excludes (optional)", id="excludes", classes="field")
-            yield Input(placeholder="initial targets (optional)", id="targets", classes="field")
+            yield Input(
+                placeholder="excludes (optional)",
+                id="excludes",
+                classes="field",
+                validators=[TargetListValidator()],
+            )
+            yield Input(
+                placeholder="initial targets (optional)",
+                id="targets",
+                classes="field",
+                validators=[TargetListValidator()],
+            )
             yield Input(
                 value=str(self.config.output_root() or ""),
                 placeholder="output dir (optional, e.g. ~/pentests/acme)",
@@ -181,6 +195,15 @@ class ProjectSelectScreen(Screen[None]):
                 severity="error",
             )
             return
+        for field, label in (
+            ("includes", "In-scope"),
+            ("excludes", "Excludes"),
+            ("targets", "Targets"),
+        ):
+            error = check_target_list(self.query_one(f"#{field}", Input).value)
+            if error is not None:
+                self.notify(f"{label}: {error}", severity="error")
+                return
         self._open(name, create=True)
 
     # -- delete ------------------------------------------------------------ #
