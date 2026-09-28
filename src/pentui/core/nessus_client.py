@@ -1,7 +1,9 @@
 """Async client for the local Nessus REST API (PROJECT.md §14, Phase C).
 
 Talks to a Nessus instance (default ``https://localhost:8834``) over its native
-REST API with API-key auth (``X-ApiKeys``). Scanning runs entirely on the local
+REST API with API-key auth (``X-ApiKeys``), plus the web UI's ``X-API-Token``
+(scraped from ``/nessus6.js``) that Nessus Professional requires before it lets
+API keys create/launch/stop scans. Scanning runs entirely on the local
 Nessus engine — nothing is sent to Tenable's cloud. The self-signed localhost
 certificate means TLS verification is disabled by design.
 
@@ -16,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
@@ -32,6 +35,16 @@ OK_STATUSES = frozenset({"completed", "imported"})
 #: Scan-template short names to prefer, best first (Basic Network Scan, etc.).
 _PREFERRED_TEMPLATES = ("basic", "advanced", "discovery")
 
+#: The web UI's API token as embedded in /nessus6.js, e.g.
+#: ``{key:"getApiToken",value:function(){return"1A23B8A6-...-9B75EC38E80D"}}``.
+_API_TOKEN_RE = re.compile(
+    r'getApiToken"\s*,\s*value\s*:\s*function\s*\(\)\s*\{\s*return\s*"([0-9A-Fa-f-]{36})"'
+)
+_NO_TOKEN_HINT = (
+    "Nessus Professional blocks API scan control without the web UI token; "
+    "set NESSUS_API_TOKEN or 'api_token' under 'nessus' in settings.json"
+)
+
 
 class NessusError(Exception):
     """A Nessus API call failed or returned an unexpected response."""
@@ -47,17 +60,42 @@ class NessusClient:
         secret_key: str,
         http: httpx.AsyncClient,
         *,
+        api_token: str | None = None,
         poll_interval: float = 5.0,
     ) -> None:
         self._http = http
         self._headers = {"X-ApiKeys": f"accessKey={access_key}; secretKey={secret_key}"}
+        self._api_token = api_token
+        self._token_resolved = False
         self._poll_interval = poll_interval
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     # -- HTTP helpers ------------------------------------------------------ #
+    async def _resolve_api_token(self) -> None:
+        """Attach the web UI's ``X-API-Token`` (once, before the first call).
+
+        Nessus Professional answers scan create/launch/stop with
+        ``412 API is not available`` for API-key requests unless they also carry
+        the token its own web UI sends, which is embedded in ``/nessus6.js``.
+        Discovery is best-effort: editions that don't gate the API (Manager)
+        work without it, so a missing token is not an error.
+        """
+        if self._token_resolved:
+            return
+        self._token_resolved = True
+        if self._api_token is None:
+            with contextlib.suppress(httpx.HTTPError):
+                resp = await self._http.get("/nessus6.js")
+                if resp.status_code == 200:
+                    match = _API_TOKEN_RE.search(resp.text)
+                    self._api_token = match.group(1) if match else None
+        if self._api_token:
+            self._headers["X-API-Token"] = self._api_token
+
     async def _request(self, method: str, path: str, **kw: Any) -> httpx.Response:
+        await self._resolve_api_token()
         try:
             resp = await self._http.request(method, path, headers=self._headers, **kw)
         except httpx.HTTPError as exc:
@@ -66,9 +104,16 @@ class NessusClient:
             detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
             if isinstance(exc, httpx.TimeoutException):
                 detail += " (Nessus did not answer in time — busy or compiling plugins?)"
+            elif not self._api_token:
+                # Nessus Pro sends its 412 and drops the connection, which
+                # surfaces as a ReadError rather than a status code.
+                detail += f" ({_NO_TOKEN_HINT})"
             raise NessusError(f"{method} {path}: {detail}") from exc
         if resp.status_code >= 400:
-            raise NessusError(f"{method} {path}: HTTP {resp.status_code} {resp.text[:200]}")
+            msg = f"{method} {path}: HTTP {resp.status_code} {resp.text[:200]}"
+            if resp.status_code == 412:
+                msg += f" ({_NO_TOKEN_HINT})"
+            raise NessusError(msg)
         return resp
 
     async def _json(self, method: str, path: str, **kw: Any) -> dict[str, Any]:

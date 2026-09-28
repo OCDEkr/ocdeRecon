@@ -130,3 +130,74 @@ async def test_transport_error_names_the_exception():
             await client.launch(["10.0.0.50"], name="t")
     finally:
         await client.aclose()
+
+
+_JS = 'x={key:"getApiToken",value:function(){return"1A23B8A6-F035-43BB-BA0B-9B75EC38E80D"}}'
+
+
+def _gated_client(seen: list[httpx.Request], *, api_token: str | None = None) -> NessusClient:
+    """Mimic Nessus Professional: scan control is 412 unless X-API-Token is sent."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/nessus6.js":
+            return httpx.Response(200, text=_JS)
+        if request.url.path == "/editor/scan/templates":
+            return httpx.Response(200, json={"templates": [{"name": "basic", "uuid": "T"}]})
+        if "X-API-Token" not in request.headers:
+            return httpx.Response(412, json={"error": "API is not available"})
+        if request.url.path == "/scans":
+            return httpx.Response(200, json={"scan": {"id": 7}})
+        return httpx.Response(200, json={})
+
+    http = httpx.AsyncClient(
+        base_url="https://localhost:8834", transport=httpx.MockTransport(handler)
+    )
+    return NessusClient(
+        "https://localhost:8834", "ak", "sk", http, api_token=api_token, poll_interval=0
+    )
+
+
+async def test_web_ui_api_token_is_discovered_and_sent():
+    seen: list[httpx.Request] = []
+    client = _gated_client(seen)
+    try:
+        assert await client.launch(["10.0.0.50"], name="t") == 7
+    finally:
+        await client.aclose()
+    assert [r.url.path for r in seen].count("/nessus6.js") == 1  # fetched once
+    api_calls = [r for r in seen if r.url.path != "/nessus6.js"]
+    assert all(
+        r.headers["X-API-Token"] == "1A23B8A6-F035-43BB-BA0B-9B75EC38E80D" for r in api_calls
+    )
+    assert all(r.headers["X-ApiKeys"] == "accessKey=ak; secretKey=sk" for r in api_calls)
+
+
+async def test_explicit_api_token_skips_discovery():
+    seen: list[httpx.Request] = []
+    client = _gated_client(seen, api_token="FEEDFACE-0000-0000-0000-000000000000")
+    try:
+        await client.launch(["10.0.0.50"], name="t")
+    finally:
+        await client.aclose()
+    assert "/nessus6.js" not in [r.url.path for r in seen]
+    assert seen[-1].headers["X-API-Token"] == "FEEDFACE-0000-0000-0000-000000000000"
+
+
+async def test_412_without_token_explains_the_pro_gate():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/editor/scan/templates":
+            return httpx.Response(200, json={"templates": [{"name": "basic", "uuid": "T"}]})
+        if request.url.path == "/nessus6.js":
+            return httpx.Response(404)
+        return httpx.Response(412, json={"error": "API is not available"})
+
+    http = httpx.AsyncClient(
+        base_url="https://localhost:8834", transport=httpx.MockTransport(handler)
+    )
+    client = NessusClient("https://localhost:8834", "ak", "sk", http, poll_interval=0)
+    try:
+        with pytest.raises(NessusError, match=r"HTTP 412 .*NESSUS_API_TOKEN"):
+            await client.launch(["10.0.0.50"], name="t")
+    finally:
+        await client.aclose()

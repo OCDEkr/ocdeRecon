@@ -7,7 +7,10 @@
 # Connection + API keys come from settings.json ('nessus': {url, access_key,
 # secret_key}) or NESSUS_URL / NESSUS_ACCESS_KEY / NESSUS_SECRET_KEY — never from
 # this manifest (it ships in the wheel). Generate keys in the Nessus UI under
-# Settings > My Account > API Keys. REST tools run via workflows, not the manual
+# Settings > My Account > API Keys. Nessus Professional rejects API-key scan
+# control (412 "API is not available") unless the web UI's X-API-Token is also
+# sent; the client scrapes it from /nessus6.js automatically (override with
+# NESSUS_API_TOKEN or 'api_token'). REST tools run via workflows, not the manual
 # scan screen. `binary` is unused by the REST runner but kept for the availability
 # hint on machines where the Nessus CLI is installed.
 name: nessus

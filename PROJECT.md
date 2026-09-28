@@ -516,6 +516,13 @@ Done when, entirely from the TUI, an operator can:
   a step remains bounded-parallel as before.
 - **Nessus API keys in the TUI** — Settings screen exposes URL/access/secret
   fields (env `NESSUS_*` still override).
+- **Nessus Professional API gate** — Pro answers API-key scan create/launch/
+  stop with `412 API is not available` (and drops the connection, so httpx sees
+  a `ReadError`). The client scrapes the web UI's `X-API-Token` from
+  `/nessus6.js` once per run and sends it alongside `X-ApiKeys`, which lifts the
+  gate with no extra credentials; `NESSUS_API_TOKEN` / `api_token` override the
+  scraped value. Verified against Nessus Professional 10.12.4. Unofficial —
+  a Nessus update that moves the token needs the override or a regex update.
 - **Cross-tool IP-range syntax** — nmap (octet shorthand `192.168.1.10-20`) and
   masscan (full begin-end `10.0.5.17-10.3.200.4`) disagree on range notation, so
   no single string satisfies both. Resolved by *not* storing tool syntax:
