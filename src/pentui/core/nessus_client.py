@@ -61,7 +61,12 @@ class NessusClient:
         try:
             resp = await self._http.request(method, path, headers=self._headers, **kw)
         except httpx.HTTPError as exc:
-            raise NessusError(f"{method} {path}: {exc}") from exc
+            # Transport errors (timeouts, dropped connections) often stringify
+            # to "" — always name the exception so the failure is diagnosable.
+            detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+            if isinstance(exc, httpx.TimeoutException):
+                detail += " (Nessus did not answer in time — busy or compiling plugins?)"
+            raise NessusError(f"{method} {path}: {detail}") from exc
         if resp.status_code >= 400:
             raise NessusError(f"{method} {path}: HTTP {resp.status_code} {resp.text[:200]}")
         return resp

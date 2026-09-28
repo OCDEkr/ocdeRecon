@@ -7,8 +7,9 @@ and polling are exercised offline.
 from __future__ import annotations
 
 import httpx
+import pytest
 
-from pentui.core.nessus_client import NessusClient
+from pentui.core.nessus_client import NessusClient, NessusError
 
 
 def _make_client(tmp_state: dict) -> NessusClient:
@@ -109,5 +110,23 @@ async def test_api_error_is_raised(tmp_path):
     try:
         with pytest.raises(NessusError):
             await client.launch(["10.0.0.1"], name="x")
+    finally:
+        await client.aclose()
+
+
+async def test_transport_error_names_the_exception():
+    # httpx timeouts stringify to "" — the error must still say what happened.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/editor/scan/templates":
+            return httpx.Response(200, json={"templates": [{"name": "basic", "uuid": "T"}]})
+        raise httpx.ReadTimeout("", request=request)
+
+    http = httpx.AsyncClient(
+        base_url="https://localhost:8834", transport=httpx.MockTransport(handler)
+    )
+    client = NessusClient("https://localhost:8834", "ak", "sk", http, poll_interval=0)
+    try:
+        with pytest.raises(NessusError, match=r"POST /scans: ReadTimeout .*in time"):
+            await client.launch(["10.0.0.50"], name="t")
     finally:
         await client.aclose()
