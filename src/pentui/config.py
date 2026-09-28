@@ -47,6 +47,8 @@ class NessusSettings:
     url: str
     access_key: str | None
     secret_key: str | None
+    #: Web UI ``X-API-Token`` override; normally auto-discovered from /nessus6.js.
+    api_token: str | None = None
 
     @property
     def configured(self) -> bool:
@@ -238,8 +240,8 @@ class AppConfig:
         """Local Nessus connection details for the REST runner.
 
         Read from ``settings.json`` under the ``nessus`` key, with environment
-        overrides (``NESSUS_URL`` / ``NESSUS_ACCESS_KEY`` / ``NESSUS_SECRET_KEY``)
-        taking precedence. Keys live outside the repo and are never committed.
+        overrides (``NESSUS_URL`` / ``NESSUS_ACCESS_KEY`` / ``NESSUS_SECRET_KEY`` /
+        ``NESSUS_API_TOKEN``) taking precedence. Keys live outside the repo and are never committed.
         Defaults to the standard local endpoint ``https://localhost:8834``.
         """
         raw = self.load_settings().get("nessus")
@@ -247,7 +249,8 @@ class AppConfig:
         url = os.environ.get("NESSUS_URL") or stored.get("url") or "https://localhost:8834"
         access = os.environ.get("NESSUS_ACCESS_KEY") or stored.get("access_key") or None
         secret = os.environ.get("NESSUS_SECRET_KEY") or stored.get("secret_key") or None
-        return NessusSettings(url=str(url), access_key=access, secret_key=secret)
+        token = os.environ.get("NESSUS_API_TOKEN") or stored.get("api_token") or None
+        return NessusSettings(url=str(url), access_key=access, secret_key=secret, api_token=token)
 
     def set_nessus_settings(
         self,

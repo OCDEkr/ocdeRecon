@@ -165,7 +165,13 @@ def _make_nessus_client(settings: NessusSettings) -> NessusClient:
     # busy scanner), so allow a long read while keeping connects snappy.
     timeout = httpx.Timeout(30.0, read=300.0)
     http = httpx.AsyncClient(base_url=settings.url, verify=False, timeout=timeout)  # noqa: S501
-    return NessusClient(settings.url, settings.access_key, settings.secret_key, http)
+    return NessusClient(
+        settings.url,
+        settings.access_key,
+        settings.secret_key,
+        http,
+        api_token=settings.api_token,
+    )
 
 
 ClientFactory = Callable[[NessusSettings], NessusClient]

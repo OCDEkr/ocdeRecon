@@ -62,7 +62,7 @@ def _config(tmp_path: Path, *, keys: bool = True) -> AppConfig:
 
 # -- config ---------------------------------------------------------------- #
 def test_nessus_settings_default_and_round_trip(tmp_path, monkeypatch):
-    for var in ("NESSUS_URL", "NESSUS_ACCESS_KEY", "NESSUS_SECRET_KEY"):
+    for var in ("NESSUS_URL", "NESSUS_ACCESS_KEY", "NESSUS_SECRET_KEY", "NESSUS_API_TOKEN"):
         monkeypatch.delenv(var, raising=False)
     config = _config(tmp_path, keys=False)
     s = config.nessus_settings()
@@ -144,7 +144,7 @@ async def test_rest_runner_defaults_scan_name(tmp_path):
 
 
 async def test_rest_runner_without_keys_fails_cleanly(tmp_path, monkeypatch):
-    for var in ("NESSUS_URL", "NESSUS_ACCESS_KEY", "NESSUS_SECRET_KEY"):
+    for var in ("NESSUS_URL", "NESSUS_ACCESS_KEY", "NESSUS_SECRET_KEY", "NESSUS_API_TOKEN"):
         monkeypatch.delenv(var, raising=False)
     config = _config(tmp_path, keys=False)
     runner = RestRunner(config, client_factory=lambda _s: FakeClient())
