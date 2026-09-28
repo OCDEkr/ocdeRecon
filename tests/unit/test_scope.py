@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from pentui.core.models import ScopeKind, ScopeRule
-from pentui.core.scope import ScopeChecker, ScopeStatus, classify_targets, write_exclude_file
+from pentui.core.scope import (
+    ScopeChecker,
+    ScopeStatus,
+    classify_targets,
+    parse_range,
+    write_exclude_file,
+)
 
 
 def _rules(*pairs: tuple[str, ScopeKind]) -> list[ScopeRule]:
@@ -127,3 +133,88 @@ def test_write_exclude_file_returns_none_without_excludes(tmp_path):
     path = tmp_path / "excludes.txt"
     assert write_exclude_file(rules, path) is None
     assert not path.exists()
+
+
+# --- IP range support (masscan/nmap syntaxes normalized to one canonical form) ---
+
+
+@pytest.mark.parametrize(
+    "value,version,start,end",
+    [
+        ("10.0.0.5", 4, "10.0.0.5", "10.0.0.5"),
+        ("10.0.0.0/24", 4, "10.0.0.0", "10.0.0.255"),
+        ("10.0.5.17-10.3.200.4", 4, "10.0.5.17", "10.3.200.4"),  # full begin-end
+        ("192.168.1.10-20", 4, "192.168.1.10", "192.168.1.20"),  # last-octet shorthand
+    ],
+)
+def test_parse_range_accepts_all_numeric_syntaxes(value, version, start, end):
+    import ipaddress
+
+    rng = parse_range(value)
+    assert rng is not None
+    assert rng.version == version
+    assert rng.start == int(ipaddress.ip_address(start))
+    assert rng.end == int(ipaddress.ip_address(end))
+
+
+@pytest.mark.parametrize("value", ["example.com", "not-an-ip", "10.0.0.5-1", "10.0.0.0-oops"])
+def test_parse_range_rejects_non_ranges(value):
+    # Hostnames and malformed / reversed ranges fall back to None (hostname path).
+    assert parse_range(value) is None
+
+
+def test_full_range_exclude_blocks_targets_inside_it():
+    checker = ScopeChecker(
+        _rules(
+            ("10.0.0.0/8", ScopeKind.INCLUDE),
+            ("10.0.5.17-10.3.200.4", ScopeKind.EXCLUDE),  # spans multiple subnets
+        )
+    )
+    # An address squarely inside the excluded range is out of scope …
+    blocked = checker.classify("10.1.2.3")
+    assert blocked.status is ScopeStatus.OUT_OF_SCOPE
+    assert "10.0.5.17-10.3.200.4" in blocked.reason
+    # … while one just outside it stays in scope.
+    assert checker.classify("10.0.5.16").status is ScopeStatus.IN_SCOPE
+    assert checker.classify("10.3.200.5").status is ScopeStatus.IN_SCOPE
+
+
+def test_shorthand_range_used_as_include():
+    checker = ScopeChecker(_rules(("192.168.1.10-20", ScopeKind.INCLUDE)))
+    assert checker.classify("192.168.1.15").status is ScopeStatus.IN_SCOPE
+    assert checker.classify("192.168.1.21").status is ScopeStatus.OUT_OF_SCOPE
+    assert checker.classify("192.168.1.9").status is ScopeStatus.OUT_OF_SCOPE
+
+
+def test_write_exclude_file_renders_range_as_cidrs(tmp_path):
+    # An arbitrary multi-subnet range must land in the file as CIDR blocks — the
+    # one syntax both nmap and masscan accept — not verbatim range text.
+    rules = _rules(
+        ("10.0.0.0/8", ScopeKind.INCLUDE),
+        ("10.0.5.17-10.3.200.4", ScopeKind.EXCLUDE),
+        ("192.168.1.5", ScopeKind.EXCLUDE),  # single IP stays bare
+    )
+    path = tmp_path / "excludes.txt"
+    assert write_exclude_file(rules, path) == path
+    lines = path.read_text().split()
+    # The single IP is emitted bare; the range expands to only CIDR blocks.
+    assert "192.168.1.5" in lines
+    cidr_lines = [ln for ln in lines if ln != "192.168.1.5"]
+    assert cidr_lines and all("/" in ln for ln in cidr_lines)
+    # And the CIDRs exactly recover the original range — no more, no less.
+    import ipaddress
+
+    covered = [ip for ln in cidr_lines for ip in ipaddress.ip_network(ln)]
+    assert covered[0] == ipaddress.ip_address("10.0.5.17")
+    assert covered[-1] == ipaddress.ip_address("10.3.200.4")
+    assert (
+        len(covered)
+        == int(ipaddress.ip_address("10.3.200.4")) - int(ipaddress.ip_address("10.0.5.17")) + 1
+    )
+
+
+def test_write_exclude_file_passes_through_hostnames(tmp_path):
+    rules = _rules(("secret.example.com", ScopeKind.EXCLUDE))
+    path = tmp_path / "excludes.txt"
+    assert write_exclude_file(rules, path) == path
+    assert path.read_text().split() == ["secret.example.com"]
