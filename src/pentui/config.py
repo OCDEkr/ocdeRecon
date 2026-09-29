@@ -40,6 +40,28 @@ def target_slug(targets: Sequence[str], *, max_len: int = 60) -> str:
     return f"{first}_and_{len(cleaned) - 1}_more"
 
 
+# File extensions stripped when naming a run folder after its input file, so
+# "nmap.xml" -> "nmap" instead of "nmap_xml".
+_INPUT_EXT = re.compile(r"\.(xml|txt|json|csv)$", re.IGNORECASE)
+
+
+def path_slug(value: str, *, max_len: int = 60) -> str:
+    """A filesystem-safe label derived from a file/dir *input path*.
+
+    ``dir_output`` tools (gowitness) run off a ``-f`` file or directory rather than
+    a target, so :func:`target_slug` is empty and their run folder would otherwise
+    fall back to the bare scan id. This names it after the input instead —
+    ``.../artifacts/7/nmap`` → ``nmap``, ``recon-nmap.xml`` → ``recon-nmap`` — while
+    :meth:`AppConfig.scan_dir` still appends ``-<scan_id>`` on collision so re-runs
+    never clobber. Uses the last path component (not :attr:`Path.stem`, which would
+    truncate an IP-like ``10.60.0.0_24`` at its final dot) and strips only a known
+    input extension.
+    """
+    name = Path(value.rstrip("/")).name
+    name = _INPUT_EXT.sub("", name)
+    return _SLUG_UNSAFE.sub("_", name).strip("._-")[:max_len].rstrip("._-")
+
+
 @dataclass(slots=True)
 class NessusSettings:
     """Connection details for a local Nessus instance (REST API)."""
@@ -176,6 +198,7 @@ class AppConfig:
         targets: Sequence[str],
         dir_output: bool = False,
         output_root_override: Path | None = None,
+        leaf_hint: str | None = None,
     ) -> ScanPaths:
         """Resolve where one run's artifact and log go, in the *flat* layout.
 
@@ -188,8 +211,12 @@ class AppConfig:
         clobbered. ``dir_output`` tools (gowitness) instead keep their own
         per-scan subfolder — see :meth:`scan_dir` — because they emit whole
         directories of fixed-named files that would collide when flattened.
+
+        When a run has no targets to name it after (a file-input tool like
+        gowitness runs off ``-f``), ``leaf_hint`` — the input path — names the
+        folder via :func:`path_slug` instead of the bare scan id.
         """
-        slug = target_slug(targets)
+        slug = target_slug(targets) or (path_slug(leaf_hint) if leaf_hint else "")
         if dir_output:
             scan_dir = self.scan_dir(
                 engagement, scan_id, tool, leaf=slug, output_root_override=output_root_override

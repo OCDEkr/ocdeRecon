@@ -44,6 +44,7 @@ from pentui.core.manifest import (
     ToolManifest,
     ToolOption,
     ToolProfile,
+    file_input_value,
     save_manifest,
 )
 from pentui.core.models import Scan, ScopeKind
@@ -325,6 +326,7 @@ class ToolConfigScreen(Screen[None]):
             targets=targets,
             dir_output=self.manifest.output.dir_output,
             output_root_override=self.engagement.output_root_override,
+            leaf_hint=file_input_value(self.manifest, options),
         )
         scan_dir = str(paths.scan_dir)
         name = paths.name

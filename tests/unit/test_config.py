@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pentui.config import AppConfig, target_slug
+from pentui.config import AppConfig, path_slug, target_slug
 
 
 def _config(tmp_path: Path) -> AppConfig:
@@ -90,6 +90,36 @@ def test_scan_paths_dir_output_keeps_a_per_run_subfolder(tmp_path):
     subfolder = config.engagement_dir("acme") / "scans" / "gowitness" / "10.0.0.0_24"
     assert paths.scan_dir == subfolder
     assert paths.log_path == subfolder / "stdout.log"
+
+
+def test_path_slug_names_folder_after_input_stem():
+    # Drops a known input extension, but keeps IP-like dotted names intact
+    # (Path.stem would truncate "10.60.0.0_24" at its last dot).
+    assert path_slug("nmap.xml") == "nmap"
+    assert path_slug("/e/artifacts/7/scan") == "scan"
+    assert path_slug("/e/artifacts/7/scan/") == "scan"
+    assert path_slug("recon-nmap.XML") == "recon-nmap"
+    assert path_slug("10.60.0.0_24.xml") == "10.60.0.0_24"
+    assert path_slug("weird name!.xml") == "weird_name"
+
+
+def test_scan_paths_dir_output_no_targets_names_folder_after_file_input(tmp_path):
+    # A file-input tool (gowitness -f) has no targets, so the folder is named after
+    # its input path via leaf_hint instead of falling back to the scan id.
+    config = _config(tmp_path)
+    paths = config.scan_paths(
+        "acme", 52, "gowitness", targets=[], dir_output=True, leaf_hint="/e/artifacts/7/scan"
+    )
+    subfolder = config.engagement_dir("acme") / "scans" / "gowitness" / "scan"
+    assert paths.scan_dir == subfolder
+    assert paths.name == "scan"
+
+
+def test_scan_paths_dir_output_no_hint_still_falls_back_to_scan_id(tmp_path):
+    config = _config(tmp_path)
+    paths = config.scan_paths("acme", 52, "gowitness", targets=[], dir_output=True)
+    subfolder = config.engagement_dir("acme") / "scans" / "gowitness" / "52"
+    assert paths.scan_dir == subfolder
 
 
 def test_scan_paths_honours_output_root_override(tmp_path):
