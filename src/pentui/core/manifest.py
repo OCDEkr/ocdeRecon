@@ -9,6 +9,7 @@ crashing the app.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 
@@ -151,6 +152,21 @@ def load_manifest(path: str | Path) -> ToolManifest:
         return ToolManifest.model_validate(raw)
     except ValidationError as exc:
         raise ManifestError(f"{path}: invalid manifest:\n{exc}") from exc
+
+
+def file_input_value(manifest: ToolManifest, options: Mapping[str, str | bool]) -> str | None:
+    """The set value of the manifest's file-input option (e.g. gowitness ``-f``).
+
+    ``dir_output`` tools run off this file/dir rather than targets; the value is
+    used to name their run folder meaningfully (see ``config.path_slug``) instead
+    of by scan id. Returns ``None`` when no file-input option is set.
+    """
+    for opt in manifest.options:
+        if opt.file_input:
+            val = options.get(opt.flag)
+            if isinstance(val, str) and val.strip():
+                return val
+    return None
 
 
 def save_manifest(manifest: ToolManifest, path: str | Path) -> Path:

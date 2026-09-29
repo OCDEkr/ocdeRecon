@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from pentui.config import AppConfig
 from pentui.core.executor import ExecutorError, requires_root
-from pentui.core.manifest import ToolKind, ToolManifest, ToolProfile
+from pentui.core.manifest import ToolKind, ToolManifest, ToolProfile, file_input_value
 from pentui.core.models import (
     GateState,
     Scan,
@@ -559,6 +559,7 @@ class WorkflowEngine:
             targets=targets,
             dir_output=manifest.output.dir_output,
             output_root_override=self.engagement.output_root_override,
+            leaf_hint=file_input_value(manifest, options),
         )
         prefix = f"[{label}] " if label else ""
 
